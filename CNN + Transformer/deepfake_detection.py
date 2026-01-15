@@ -477,7 +477,6 @@ def train_model():
         mode='min',
         factor=0.5,  # Giảm LR xuống 50%
         patience=5,  # Đợi 5 epochs
-        verbose=True
     )
     
     # 4. Training loop
