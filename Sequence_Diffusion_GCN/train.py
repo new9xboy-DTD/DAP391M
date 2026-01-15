@@ -25,6 +25,9 @@ Cách sử dụng:
     python train.py --phase 3  # Train fusion module
     python train.py --phase all  # Train tất cả
     
+    # Train trên Google Colab (dùng MyDrive cho dataset và checkpoints)
+    python train.py --phase all --colab
+    
 Tác giả: DAP391M Team
 Phiên bản: 1.0
 =====================================================================
@@ -694,8 +697,28 @@ def main():
                        help='Number of epochs (override config)')
     parser.add_argument('--device', type=str, default=None,
                        help='Device (cuda/cpu)')
+    parser.add_argument('--colab', action='store_true',
+                       help='Enable Google Colab mode (use MyDrive paths for dataset and checkpoints)')
     
     args = parser.parse_args()
+    
+    # Configure paths for Google Colab if enabled
+    if args.colab:
+        # Update DataConfig paths for Google Colab
+        DataConfig.DATASET_ROOT = "/content/drive/MyDrive/datasets/faces"
+        DataConfig.TRAIN_DIR = os.path.join(DataConfig.DATASET_ROOT, "Train")
+        DataConfig.VAL_DIR = os.path.join(DataConfig.DATASET_ROOT, "Validation")
+        DataConfig.TEST_DIR = os.path.join(DataConfig.DATASET_ROOT, "Test")
+        
+        # Save checkpoints and outputs to MyDrive
+        DataConfig.CHECKPOINT_DIR = "/content/drive/MyDrive/checkpoints"
+        DataConfig.LOG_DIR = "/content/drive/MyDrive/logs"
+        DataConfig.RESULTS_DIR = "/content/drive/MyDrive/results"
+        
+        print("\n☁️  Google Colab mode enabled!")
+        print(f"   → Dataset: {DataConfig.DATASET_ROOT}")
+        print(f"   → Checkpoints: {DataConfig.CHECKPOINT_DIR}")
+        print(f"   → Logs: {DataConfig.LOG_DIR}")
     
     # Print banner
     print("\n" + "=" * 70)
