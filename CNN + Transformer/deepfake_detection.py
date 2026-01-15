@@ -178,22 +178,24 @@ class CNNTransformerModel(nn.Module):
             global_pool=''  # Giữ lại spatial features thay vì global pooling
         )
         
-        # Lấy số channels output của CNN
-        with torch.no_grad():
-            dummy_input = torch.randn(1, 3, Config.IMG_SIZE, Config.IMG_SIZE)
-            cnn_output = self.cnn_backbone(dummy_input)
-            self.cnn_feature_dim = cnn_output.shape[1]  # Channels
-            self.spatial_size = cnn_output.shape[2] * cnn_output.shape[3]  # H x W
-            print(f"📐 CNN output shape: {cnn_output.shape}")
-            print(f"📐 Feature dimension: {self.cnn_feature_dim}, Spatial size: {self.spatial_size}")
+        # Lấy thông tin về output shape của CNN từ feature_info
+        # EfficientNet-B0 với input 256x256 output là (1280, 8, 8)
+        self.cnn_feature_dim = self.cnn_backbone.num_features  # Channels từ model
+        # Tính spatial size dựa trên input size và reduction factor
+        # EfficientNet-B0 có reduction factor là 32 (stride tổng cộng)
+        self.spatial_size = (Config.IMG_SIZE // 32) ** 2  # 8 x 8 = 64 cho img_size 256
+        print(f"📐 CNN feature dimension: {self.cnn_feature_dim}")
+        print(f"📐 Spatial size: {self.spatial_size} (grid: {Config.IMG_SIZE // 32}x{Config.IMG_SIZE // 32})")
         
         # 2. Feature Projection - Chuyển CNN features sang dimension của Transformer
         self.feature_projection = nn.Linear(self.cnn_feature_dim, Config.D_MODEL)
         
         # 3. Positional Encoding - Thêm thông tin vị trí cho các spatial features
+        # Sử dụng learnable positional embeddings với Xavier initialization
         self.positional_encoding = nn.Parameter(
-            torch.randn(1, self.spatial_size, Config.D_MODEL)
+            torch.zeros(1, self.spatial_size, Config.D_MODEL)
         )
+        nn.init.xavier_uniform_(self.positional_encoding)
         
         # 4. Transformer Encoder - Học mối quan hệ global giữa các features
         encoder_layer = nn.TransformerEncoderLayer(
