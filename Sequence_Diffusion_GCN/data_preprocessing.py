@@ -95,11 +95,14 @@ def get_vqvae_transforms():
     VQ-VAE cần pixel values trong khoảng [-1, 1] thay vì ImageNet normalization
     để reconstruction loss có ý nghĩa hơn.
     
+    Sử dụng VQVAE_IMG_SIZE (128x128) thay vì IMG_SIZE (256x256) để tối ưu
+    cho GPU có VRAM hạn chế như GTX1070.
+    
     Returns:
         transforms.Compose: Transforms cho VQ-VAE
     """
     return transforms.Compose([
-        transforms.Resize((DataConfig.IMG_SIZE, DataConfig.IMG_SIZE)),
+        transforms.Resize((DataConfig.VQVAE_IMG_SIZE, DataConfig.VQVAE_IMG_SIZE)),
         transforms.ToTensor(),
         # Scale từ [0, 1] sang [-1, 1]
         transforms.Normalize(

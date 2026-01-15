@@ -703,7 +703,7 @@ if __name__ == "__main__":
     # Test với random input
     print("\n2. Test forward pass...")
     batch_size = 2
-    x = torch.randn(batch_size, 3, DataConfig.IMG_SIZE, DataConfig.IMG_SIZE)
+    x = torch.randn(batch_size, 3, DataConfig.VQVAE_IMG_SIZE, DataConfig.VQVAE_IMG_SIZE)
     print(f"   Input shape: {x.shape}")
     
     # Forward pass
