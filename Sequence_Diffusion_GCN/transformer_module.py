@@ -634,7 +634,7 @@ class TransformerTrainer:
     Helper class để training ImageGPT
     
     Bao gồm:
-    - Training loop
+    - Training loop với Mixed Precision Training (AMP)
     - Learning rate scheduling với warmup
     - Logging và checkpointing
     
@@ -643,13 +643,18 @@ class TransformerTrainer:
         optimizer: Optimizer
         device: Device để training
         warmup_steps: Số steps warmup cho LR scheduler
+        use_amp: Sử dụng Mixed Precision Training (mặc định: True cho CUDA)
     """
     
-    def __init__(self, model, optimizer, device, warmup_steps=4000):
+    def __init__(self, model, optimizer, device, warmup_steps=4000, use_amp=True):
         self.model = model
         self.optimizer = optimizer
         self.device = device
         self.warmup_steps = warmup_steps
+        self.use_amp = use_amp and device.type == 'cuda'
+        
+        # GradScaler cho Mixed Precision Training
+        self.scaler = torch.amp.GradScaler('cuda', enabled=self.use_amp)
         
         # Learning rate scheduler với warmup
         self.global_step = 0
@@ -681,7 +686,7 @@ class TransformerTrainer:
     
     def train_step(self, token_indices, label_smoothing=0.0):
         """
-        Một bước training
+        Một bước training với Mixed Precision Training (AMP)
         
         Args:
             token_indices: Token IDs (B, seq_len)
@@ -691,20 +696,25 @@ class TransformerTrainer:
             loss: Scalar loss value
         """
         self.model.train()
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)  # Nhanh hơn zero_grad()
         
-        # Forward và compute loss
+        # Forward và compute loss với AMP autocast
         token_indices = token_indices.to(self.device)
-        loss = self.model.compute_loss(token_indices, label_smoothing)
         
-        # Backward
-        loss.backward()
+        with torch.amp.autocast('cuda', enabled=self.use_amp):
+            loss = self.model.compute_loss(token_indices, label_smoothing)
+        
+        # Backward với gradient scaling
+        self.scaler.scale(loss).backward()
         
         # Gradient clipping để tránh exploding gradients
+        # Cần unscale trước khi clip với AMP
+        self.scaler.unscale_(self.optimizer)
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         
-        # Update
-        self.optimizer.step()
+        # Update với scaler
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
         
         # Update learning rate
         self.global_step += 1
