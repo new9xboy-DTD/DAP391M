@@ -32,6 +32,46 @@ from config import VQVAEConfig, DataConfig
 
 
 # =====================================================================
+# CONSTANTS
+# =====================================================================
+
+# Safe replacement values for NaN/Inf in image tensors
+NAN_REPLACEMENT = 0.0
+POSINF_REPLACEMENT = 1.0
+NEGINF_REPLACEMENT = -1.0
+
+
+# =====================================================================
+# HELPER FUNCTIONS
+# =====================================================================
+
+def compute_perplexity(encodings, num_embeddings):
+    """
+    Tính perplexity từ encoding distribution
+    
+    Perplexity đo độ đa dạng sử dụng codebook.
+    Giá trị cao = sử dụng nhiều embeddings khác nhau = tốt.
+    
+    Args:
+        encodings: One-hot encoded tensor (N, num_embeddings)
+        num_embeddings: Số lượng embeddings trong codebook
+        
+    Returns:
+        Perplexity tensor (scalar)
+    """
+    avg_probs = torch.mean(encodings, dim=0)
+    # Clamp để tránh log(0)
+    avg_probs = torch.clamp(avg_probs, min=1e-10, max=1.0)
+    perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs)))
+    
+    # Ensure perplexity is finite
+    if not torch.isfinite(perplexity):
+        perplexity = torch.tensor(1.0, device=perplexity.device)
+    
+    return perplexity
+
+
+# =====================================================================
 # RESIDUAL BLOCK
 # =====================================================================
 
@@ -338,16 +378,8 @@ class VectorQuantizer(nn.Module):
         quantized = z_original + (quantized - z_original).detach()
         
         # Tính perplexity (đo độ đa dạng sử dụng codebook)
-        # Perplexity cao = sử dụng nhiều embeddings khác nhau = tốt
         encodings = F.one_hot(encoding_indices, self.num_embeddings).float()
-        avg_probs = torch.mean(encodings, dim=0)
-        # Clamp avg_probs để tránh log(0)
-        avg_probs = torch.clamp(avg_probs, min=1e-10, max=1.0)
-        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs)))
-        
-        # Ensure perplexity is finite
-        if not torch.isfinite(perplexity):
-            perplexity = torch.tensor(1.0, device=perplexity.device)
+        perplexity = compute_perplexity(encodings, self.num_embeddings)
         
         # Reshape indices về (B, H*W) để dùng cho Transformer
         batch_size = z_shape[0]
@@ -460,14 +492,7 @@ class VectorQuantizerEMA(nn.Module):
         quantized = z_original + (quantized - z_original).detach()
         
         # Perplexity
-        avg_probs = torch.mean(encodings, dim=0)
-        # Clamp avg_probs để tránh log(0)
-        avg_probs = torch.clamp(avg_probs, min=1e-10, max=1.0)
-        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs)))
-        
-        # Ensure perplexity is finite
-        if not torch.isfinite(perplexity):
-            perplexity = torch.tensor(1.0, device=perplexity.device)
+        perplexity = compute_perplexity(encodings, self.num_embeddings)
         
         # Reshape indices
         batch_size = z_shape[0]
@@ -700,11 +725,11 @@ def vqvae_loss(recon, target, vq_loss, recon_weight=1.0, vq_weight=1.0):
     # Check for NaN/Inf in inputs
     if not torch.isfinite(recon).all():
         print("⚠️  Warning: NaN/Inf detected in reconstructed images")
-        recon = torch.nan_to_num(recon, nan=0.0, posinf=1.0, neginf=-1.0)
+        recon = torch.nan_to_num(recon, nan=NAN_REPLACEMENT, posinf=POSINF_REPLACEMENT, neginf=NEGINF_REPLACEMENT)
     
     if not torch.isfinite(target).all():
         print("⚠️  Warning: NaN/Inf detected in target images")
-        target = torch.nan_to_num(target, nan=0.0, posinf=1.0, neginf=-1.0)
+        target = torch.nan_to_num(target, nan=NAN_REPLACEMENT, posinf=POSINF_REPLACEMENT, neginf=NEGINF_REPLACEMENT)
     
     if not torch.isfinite(vq_loss):
         print(f"⚠️  Warning: NaN/Inf detected in vq_loss: {vq_loss}")

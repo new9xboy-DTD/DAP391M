@@ -274,13 +274,13 @@ def train_vqvae(num_epochs=None, save_every=10):
             
             # Gradient clipping để tránh exploding gradients
             scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=VQVAEConfig.GRAD_CLIP_MAX_NORM)
             
             scaler.step(optimizer)
             scaler.update()
             
             # Check for NaN in model parameters
-            if batch_idx % 100 == 0:
+            if batch_idx % VQVAEConfig.NAN_CHECK_INTERVAL == 0:
                 has_nan = False
                 for name, param in model.named_parameters():
                     if param.grad is not None and not torch.isfinite(param.grad).all():

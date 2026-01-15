@@ -118,6 +118,12 @@ class VQVAEConfig:
     # Hệ số các thành phần loss
     RECON_LOSS_WEIGHT = 1.0  # Trọng số reconstruction loss
     VQ_LOSS_WEIGHT = 1.0  # Trọng số vector quantization loss
+    
+    # Gradient clipping
+    GRAD_CLIP_MAX_NORM = 1.0  # Max norm cho gradient clipping
+    
+    # NaN detection
+    NAN_CHECK_INTERVAL = 100  # Kiểm tra NaN mỗi N batches
 
 
 class TransformerConfig:

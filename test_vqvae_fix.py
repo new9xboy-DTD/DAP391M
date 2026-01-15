@@ -1,5 +1,6 @@
 """
-Test script để verify VQVAE training NaN fix
+Test script to verify VQVAE training NaN fix
+Kiểm tra việc sửa lỗi hiển thị NaN khi train VQVAE
 """
 
 import sys
