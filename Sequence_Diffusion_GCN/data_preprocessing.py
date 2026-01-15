@@ -320,38 +320,37 @@ def create_dataloaders(mode='supervised', extract_landmarks=False):
     # persistent_workers: Giữ workers sống giữa các epochs để tránh overhead khởi tạo
     # prefetch_factor: Số batches được prefetch bởi mỗi worker
     # pin_memory: Pin memory để tăng tốc transfer data lên GPU
-    use_persistent = DataConfig.NUM_WORKERS > 0 and getattr(DataConfig, 'PERSISTENT_WORKERS', True)
-    prefetch = getattr(DataConfig, 'PREFETCH_FACTOR', 2) if DataConfig.NUM_WORKERS > 0 else None
+    use_multiprocessing = DataConfig.NUM_WORKERS > 0
+    
+    # Common DataLoader kwargs
+    common_kwargs = {
+        'batch_size': DataConfig.BATCH_SIZE,
+        'num_workers': DataConfig.NUM_WORKERS,
+        'pin_memory': getattr(DataConfig, 'PIN_MEMORY', True),
+    }
+    
+    # Thêm các options cho multiprocessing (chỉ khi num_workers > 0)
+    if use_multiprocessing:
+        common_kwargs['persistent_workers'] = getattr(DataConfig, 'PERSISTENT_WORKERS', True)
+        common_kwargs['prefetch_factor'] = getattr(DataConfig, 'PREFETCH_FACTOR', 2)
     
     train_loader = DataLoader(
         train_dataset,
-        batch_size=DataConfig.BATCH_SIZE,
         shuffle=True,  # Shuffle trong training
-        num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=getattr(DataConfig, 'PIN_MEMORY', True),  # Tăng tốc transfer data lên GPU
         drop_last=True,  # Bỏ batch cuối nếu không đủ size
-        persistent_workers=use_persistent,  # Tránh overhead khởi tạo workers mỗi epoch
-        prefetch_factor=prefetch  # Prefetch data để overlap với GPU computation
+        **common_kwargs
     )
     
     val_loader = DataLoader(
         val_dataset,
-        batch_size=DataConfig.BATCH_SIZE,
         shuffle=False,
-        num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=getattr(DataConfig, 'PIN_MEMORY', True),
-        persistent_workers=use_persistent,
-        prefetch_factor=prefetch
+        **common_kwargs
     )
     
     test_loader = DataLoader(
         test_dataset,
-        batch_size=DataConfig.BATCH_SIZE,
         shuffle=False,
-        num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=getattr(DataConfig, 'PIN_MEMORY', True),
-        persistent_workers=use_persistent,
-        prefetch_factor=prefetch
+        **common_kwargs
     )
     
     # In thống kê

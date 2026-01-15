@@ -641,7 +641,7 @@ class TransformerTrainer:
     Args:
         model: ImageGPT model
         optimizer: Optimizer
-        device: Device để training
+        device: Device để training (torch.device hoặc string)
         warmup_steps: Số steps warmup cho LR scheduler
         use_amp: Sử dụng Mixed Precision Training (mặc định: True cho CUDA)
     """
@@ -651,7 +651,11 @@ class TransformerTrainer:
         self.optimizer = optimizer
         self.device = device
         self.warmup_steps = warmup_steps
-        self.use_amp = use_amp and device.type == 'cuda'
+        
+        # Kiểm tra device type một cách an toàn
+        device_type = device.type if hasattr(device, 'type') else str(device)
+        is_cuda = 'cuda' in device_type
+        self.use_amp = use_amp and is_cuda
         
         # GradScaler cho Mixed Precision Training
         self.scaler = torch.amp.GradScaler('cuda', enabled=self.use_amp)
