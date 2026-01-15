@@ -321,6 +321,15 @@ class VectorQuantizer(nn.Module):
         
         codebook_loss = F.mse_loss(quantized.detach(), z_original)
         commitment_loss = F.mse_loss(quantized, z_original.detach())
+        
+        # Check for NaN in losses
+        if not torch.isfinite(codebook_loss):
+            print("⚠️  Warning: codebook_loss is not finite")
+            codebook_loss = torch.tensor(0.0, device=codebook_loss.device)
+        if not torch.isfinite(commitment_loss):
+            print("⚠️  Warning: commitment_loss is not finite")
+            commitment_loss = torch.tensor(0.0, device=commitment_loss.device)
+        
         vq_loss = codebook_loss + self.commitment_cost * commitment_loss
         
         # Straight-through estimator
@@ -332,7 +341,13 @@ class VectorQuantizer(nn.Module):
         # Perplexity cao = sử dụng nhiều embeddings khác nhau = tốt
         encodings = F.one_hot(encoding_indices, self.num_embeddings).float()
         avg_probs = torch.mean(encodings, dim=0)
-        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
+        # Clamp avg_probs để tránh log(0)
+        avg_probs = torch.clamp(avg_probs, min=1e-10, max=1.0)
+        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs)))
+        
+        # Ensure perplexity is finite
+        if not torch.isfinite(perplexity):
+            perplexity = torch.tensor(1.0, device=perplexity.device)
         
         # Reshape indices về (B, H*W) để dùng cho Transformer
         batch_size = z_shape[0]
@@ -436,12 +451,23 @@ class VectorQuantizerEMA(nn.Module):
         
         commitment_loss = self.commitment_cost * F.mse_loss(quantized.detach(), z_original)
         
+        # Check for NaN
+        if not torch.isfinite(commitment_loss):
+            print("⚠️  Warning: commitment_loss is not finite")
+            commitment_loss = torch.tensor(0.0, device=commitment_loss.device)
+        
         # Straight-through estimator
         quantized = z_original + (quantized - z_original).detach()
         
         # Perplexity
         avg_probs = torch.mean(encodings, dim=0)
-        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
+        # Clamp avg_probs để tránh log(0)
+        avg_probs = torch.clamp(avg_probs, min=1e-10, max=1.0)
+        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs)))
+        
+        # Ensure perplexity is finite
+        if not torch.isfinite(perplexity):
+            perplexity = torch.tensor(1.0, device=perplexity.device)
         
         # Reshape indices
         batch_size = z_shape[0]
@@ -671,8 +697,26 @@ def vqvae_loss(recon, target, vq_loss, recon_weight=1.0, vq_weight=1.0):
     Returns:
         tuple: (total_loss, loss_dict)
     """
+    # Check for NaN/Inf in inputs
+    if not torch.isfinite(recon).all():
+        print("⚠️  Warning: NaN/Inf detected in reconstructed images")
+        recon = torch.nan_to_num(recon, nan=0.0, posinf=1.0, neginf=-1.0)
+    
+    if not torch.isfinite(target).all():
+        print("⚠️  Warning: NaN/Inf detected in target images")
+        target = torch.nan_to_num(target, nan=0.0, posinf=1.0, neginf=-1.0)
+    
+    if not torch.isfinite(vq_loss):
+        print(f"⚠️  Warning: NaN/Inf detected in vq_loss: {vq_loss}")
+        vq_loss = torch.tensor(0.0, device=vq_loss.device)
+    
     # Reconstruction loss (MSE)
     recon_loss = F.mse_loss(recon, target)
+    
+    # Check if recon_loss is finite
+    if not torch.isfinite(recon_loss):
+        print("⚠️  Warning: recon_loss is not finite, setting to 0")
+        recon_loss = torch.tensor(0.0, device=recon_loss.device)
     
     # Tổng loss
     total_loss = recon_weight * recon_loss + vq_weight * vq_loss
@@ -680,7 +724,7 @@ def vqvae_loss(recon, target, vq_loss, recon_weight=1.0, vq_weight=1.0):
     return total_loss, {
         'total': total_loss.item(),
         'recon': recon_loss.item(),
-        'vq': vq_loss.item()
+        'vq': vq_loss.item() if torch.isfinite(vq_loss) else 0.0
     }
 
 

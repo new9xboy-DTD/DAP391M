@@ -158,10 +158,15 @@ class AverageMeter:
         self.count = 0
     
     def update(self, val, n=1):
+        # Check for NaN or Inf
+        if not torch.isfinite(torch.tensor(val)):
+            print(f"⚠️  Warning: Received non-finite value: {val}")
+            return
+        
         self.val = val
         self.sum += val * n
         self.count += n
-        self.avg = self.sum / self.count
+        self.avg = self.sum / self.count if self.count > 0 else 0
 
 
 # =====================================================================
@@ -266,18 +271,35 @@ def train_vqvae(num_epochs=None, save_every=10):
             # Backward với gradient scaling
             optimizer.zero_grad(set_to_none=True)  # Nhanh hơn zero_grad()
             scaler.scale(total_loss).backward()
+            
+            # Gradient clipping để tránh exploding gradients
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             scaler.step(optimizer)
             scaler.update()
+            
+            # Check for NaN in model parameters
+            if batch_idx % 100 == 0:
+                has_nan = False
+                for name, param in model.named_parameters():
+                    if param.grad is not None and not torch.isfinite(param.grad).all():
+                        print(f"⚠️  NaN/Inf detected in gradients of {name}")
+                        has_nan = True
+                if has_nan:
+                    print("❌ Training stopped due to NaN/Inf in gradients")
+                    return None
             
             # Update metrics
             train_loss.update(loss_dict['total'])
             train_recon.update(loss_dict['recon'])
             train_vq.update(loss_dict['vq'])
             
+            # Safe display with fallback for first iteration
             pbar.set_postfix({
-                'loss': f'{train_loss.avg:.4f}',
-                'recon': f'{train_recon.avg:.4f}',
-                'ppl': f'{perplexity.item():.1f}'
+                'loss': f'{train_loss.avg:.4f}' if train_loss.count > 0 else 'N/A',
+                'recon': f'{train_recon.avg:.4f}' if train_recon.count > 0 else 'N/A',
+                'ppl': f'{perplexity.item():.1f}' if torch.isfinite(perplexity) else 'N/A'
             })
         
         # Validation
