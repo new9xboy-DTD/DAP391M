@@ -316,30 +316,41 @@ def create_dataloaders(mode='supervised', extract_landmarks=False):
         extract_landmarks=extract_landmarks
     )
     
-    # Tạo DataLoaders
+    # Tạo DataLoaders với tối ưu hóa tốc độ
+    # persistent_workers: Giữ workers sống giữa các epochs để tránh overhead khởi tạo
+    # prefetch_factor: Số batches được prefetch bởi mỗi worker
+    # pin_memory: Pin memory để tăng tốc transfer data lên GPU
+    use_multiprocessing = DataConfig.NUM_WORKERS > 0
+    
+    # Common DataLoader kwargs
+    common_kwargs = {
+        'batch_size': DataConfig.BATCH_SIZE,
+        'num_workers': DataConfig.NUM_WORKERS,
+        'pin_memory': getattr(DataConfig, 'PIN_MEMORY', True),
+    }
+    
+    # Thêm các options cho multiprocessing (chỉ khi num_workers > 0)
+    if use_multiprocessing:
+        common_kwargs['persistent_workers'] = getattr(DataConfig, 'PERSISTENT_WORKERS', True)
+        common_kwargs['prefetch_factor'] = getattr(DataConfig, 'PREFETCH_FACTOR', 2)
+    
     train_loader = DataLoader(
         train_dataset,
-        batch_size=DataConfig.BATCH_SIZE,
         shuffle=True,  # Shuffle trong training
-        num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=True,  # Tăng tốc transfer data lên GPU
-        drop_last=True  # Bỏ batch cuối nếu không đủ size
+        drop_last=True,  # Bỏ batch cuối nếu không đủ size
+        **common_kwargs
     )
     
     val_loader = DataLoader(
         val_dataset,
-        batch_size=DataConfig.BATCH_SIZE,
         shuffle=False,
-        num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=True
+        **common_kwargs
     )
     
     test_loader = DataLoader(
         test_dataset,
-        batch_size=DataConfig.BATCH_SIZE,
         shuffle=False,
-        num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=True
+        **common_kwargs
     )
     
     # In thống kê

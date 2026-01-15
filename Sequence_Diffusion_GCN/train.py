@@ -68,19 +68,27 @@ from fusion_module import DeepfakeFusionModule
 # UTILITY FUNCTIONS
 # =====================================================================
 
-def set_seed(seed):
+def set_seed(seed, deterministic=False):
     """
     Đặt random seed để đảm bảo reproducibility
     
     Args:
         seed: Giá trị seed
+        deterministic: Nếu True, sử dụng deterministic mode (chậm hơn nhưng reproducible)
+                      Nếu False, cho phép cudnn.benchmark để tăng tốc (khuyến nghị cho training)
     """
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
-    # Deterministic mode (có thể làm chậm)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    
+    if deterministic:
+        # Deterministic mode (chậm hơn nhưng reproducible hoàn toàn)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    else:
+        # Performance mode (nhanh hơn cho fixed-size inputs như 256x256)
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = True
 
 
 def save_checkpoint(model, optimizer, epoch, loss, path, extra_info=None):
@@ -167,6 +175,12 @@ def train_vqvae(num_epochs=None, save_every=10):
     VQ-VAE học cách tokenize ảnh thành discrete tokens.
     Chỉ dùng ảnh thật (unsupervised).
     
+    Tối ưu hóa tốc độ:
+    - Sử dụng Mixed Precision Training (AMP) với GradScaler
+    - cudnn.benchmark=True cho fixed-size inputs
+    - non_blocking=True cho data transfer
+    - Gradient scaling để tránh underflow với FP16
+    
     Args:
         num_epochs: Số epochs (None = dùng config)
         save_every: Lưu checkpoint sau mỗi N epochs
@@ -179,6 +193,10 @@ def train_vqvae(num_epochs=None, save_every=10):
         num_epochs = VQVAEConfig.NUM_EPOCHS
     
     device = TrainingConfig.DEVICE
+    use_amp = TrainingConfig.USE_AMP and device.type == 'cuda'
+    
+    if use_amp:
+        print("⚡ Mixed Precision Training (AMP) ENABLED - Tăng tốc đáng kể!")
     
     # Data loaders (chỉ ảnh thật)
     print("\n📂 Loading data...")
@@ -207,6 +225,9 @@ def train_vqvae(num_epochs=None, save_every=10):
         optimizer, mode='min', factor=0.5, patience=5
     )
     
+    # GradScaler cho Mixed Precision Training
+    scaler = torch.amp.GradScaler('cuda', enabled=use_amp)
+    
     # TensorBoard
     writer = SummaryWriter(os.path.join(DataConfig.LOG_DIR, 'vqvae'))
     
@@ -227,22 +248,26 @@ def train_vqvae(num_epochs=None, save_every=10):
         
         pbar = tqdm(train_loader, desc="Training")
         for batch_idx, (images, _) in enumerate(pbar):
-            images = images.to(device)
+            # non_blocking=True để overlap data transfer với computation
+            images = images.to(device, non_blocking=True)
             
-            # Forward
-            recon, vq_loss_val, perplexity, _ = model(images)
+            # Mixed Precision Training với autocast
+            with torch.amp.autocast('cuda', enabled=use_amp):
+                # Forward
+                recon, vq_loss_val, perplexity, _ = model(images)
+                
+                # Compute loss
+                total_loss, loss_dict = vqvae_loss(
+                    recon, images, vq_loss_val,
+                    recon_weight=VQVAEConfig.RECON_LOSS_WEIGHT,
+                    vq_weight=VQVAEConfig.VQ_LOSS_WEIGHT
+                )
             
-            # Compute loss
-            total_loss, loss_dict = vqvae_loss(
-                recon, images, vq_loss_val,
-                recon_weight=VQVAEConfig.RECON_LOSS_WEIGHT,
-                vq_weight=VQVAEConfig.VQ_LOSS_WEIGHT
-            )
-            
-            # Backward
-            optimizer.zero_grad()
-            total_loss.backward()
-            optimizer.step()
+            # Backward với gradient scaling
+            optimizer.zero_grad(set_to_none=True)  # Nhanh hơn zero_grad()
+            scaler.scale(total_loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             
             # Update metrics
             train_loss.update(loss_dict['total'])
@@ -261,9 +286,10 @@ def train_vqvae(num_epochs=None, save_every=10):
         
         with torch.no_grad():
             for images, _ in val_loader:
-                images = images.to(device)
-                recon, vq_loss_val, _, _ = model(images)
-                total_loss, _ = vqvae_loss(recon, images, vq_loss_val)
+                images = images.to(device, non_blocking=True)
+                with torch.amp.autocast('cuda', enabled=use_amp):
+                    recon, vq_loss_val, _, _ = model(images)
+                    total_loss, _ = vqvae_loss(recon, images, vq_loss_val)
                 val_loss.update(total_loss.item())
         
         # Update scheduler
@@ -284,12 +310,14 @@ def train_vqvae(num_epochs=None, save_every=10):
                 DataConfig.CHECKPOINT_DIR,
                 f'vqvae_epoch_{epoch}.pth'
             )
-            save_checkpoint(model, optimizer, epoch, val_loss.avg, save_path)
+            save_checkpoint(model, optimizer, epoch, val_loss.avg, save_path,
+                          extra_info={'scaler_state_dict': scaler.state_dict()})
             
             if val_loss.avg < best_loss:
                 best_loss = val_loss.avg
                 best_path = os.path.join(DataConfig.CHECKPOINT_DIR, 'vqvae_best.pth')
-                save_checkpoint(model, optimizer, epoch, best_loss, best_path)
+                save_checkpoint(model, optimizer, epoch, best_loss, best_path,
+                              extra_info={'scaler_state_dict': scaler.state_dict()})
     
     writer.close()
     print(f"\n✅ VQ-VAE training hoàn thành! Best loss: {best_loss:.4f}")
@@ -302,6 +330,10 @@ def train_transformer(vqvae_path=None, num_epochs=None, save_every=10):
     Train Transformer (GPT-like) model
     
     Transformer học phân phối của các image tokens từ VQ-VAE.
+    
+    Tối ưu hóa tốc độ:
+    - Sử dụng Mixed Precision Training (AMP)
+    - non_blocking=True cho data transfer
     
     Args:
         vqvae_path: Đường dẫn đến trained VQ-VAE
@@ -316,6 +348,10 @@ def train_transformer(vqvae_path=None, num_epochs=None, save_every=10):
         num_epochs = TransformerConfig.NUM_EPOCHS
     
     device = TrainingConfig.DEVICE
+    use_amp = TrainingConfig.USE_AMP and device.type == 'cuda'
+    
+    if use_amp:
+        print("⚡ Mixed Precision Training (AMP) ENABLED - Tăng tốc đáng kể!")
     
     # Load VQ-VAE
     print("\n📂 Loading VQ-VAE...")
@@ -348,10 +384,11 @@ def train_transformer(vqvae_path=None, num_epochs=None, save_every=10):
         weight_decay=0.01
     )
     
-    # Trainer
+    # Trainer với AMP support
     trainer = TransformerTrainer(
         model, optimizer, device,
-        warmup_steps=TransformerConfig.WARMUP_STEPS
+        warmup_steps=TransformerConfig.WARMUP_STEPS,
+        use_amp=use_amp
     )
     
     # TensorBoard
@@ -371,11 +408,12 @@ def train_transformer(vqvae_path=None, num_epochs=None, save_every=10):
         
         pbar = tqdm(train_loader, desc="Training")
         for images, _ in pbar:
-            images = images.to(device)
+            images = images.to(device, non_blocking=True)
             
-            # Get tokens from VQ-VAE
+            # Get tokens from VQ-VAE (dùng AMP cho encoding)
             with torch.no_grad():
-                _, token_indices = vqvae.encode(images)
+                with torch.amp.autocast('cuda', enabled=use_amp):
+                    _, token_indices = vqvae.encode(images)
             
             # Train transformer
             loss = trainer.train_step(
@@ -393,11 +431,11 @@ def train_transformer(vqvae_path=None, num_epochs=None, save_every=10):
         
         with torch.no_grad():
             for images, _ in val_loader:
-                images = images.to(device)
-                _, token_indices = vqvae.encode(images)
-                
-                loss = model.compute_loss(token_indices)
-                perplexity = model.compute_perplexity(token_indices)
+                images = images.to(device, non_blocking=True)
+                with torch.amp.autocast('cuda', enabled=use_amp):
+                    _, token_indices = vqvae.encode(images)
+                    loss = model.compute_loss(token_indices)
+                    perplexity = model.compute_perplexity(token_indices)
                 
                 val_loss.update(loss.item())
                 val_perplexity.update(perplexity.mean().item())
@@ -435,6 +473,10 @@ def train_ddpm(num_epochs=None, save_every=10):
     
     DDPM học cách khử nhiễu ảnh, chỉ dùng ảnh thật.
     
+    Tối ưu hóa tốc độ:
+    - Sử dụng Mixed Precision Training (AMP)
+    - non_blocking=True cho data transfer
+    
     Args:
         num_epochs: Số epochs
         save_every: Lưu checkpoint mỗi N epochs
@@ -447,6 +489,10 @@ def train_ddpm(num_epochs=None, save_every=10):
         num_epochs = DiffusionConfig.NUM_EPOCHS
     
     device = TrainingConfig.DEVICE
+    use_amp = TrainingConfig.USE_AMP and device.type == 'cuda'
+    
+    if use_amp:
+        print("⚡ Mixed Precision Training (AMP) ENABLED - Tăng tốc đáng kể!")
     
     # Data loaders (chỉ ảnh thật)
     dataloaders = create_dataloaders(mode='unsupervised')
@@ -468,6 +514,9 @@ def train_ddpm(num_epochs=None, save_every=10):
         weight_decay=0.01
     )
     
+    # GradScaler cho Mixed Precision Training
+    scaler = torch.amp.GradScaler('cuda', enabled=use_amp)
+    
     # TensorBoard
     writer = SummaryWriter(os.path.join(DataConfig.LOG_DIR, 'ddpm'))
     
@@ -485,16 +534,22 @@ def train_ddpm(num_epochs=None, save_every=10):
         
         pbar = tqdm(train_loader, desc="Training")
         for images, _ in pbar:
-            images = images.to(device)
+            images = images.to(device, non_blocking=True)
             
-            # Forward
-            loss = model(images)
+            # Forward với AMP autocast
+            with torch.amp.autocast('cuda', enabled=use_amp):
+                loss = model(images)
             
-            # Backward
-            optimizer.zero_grad()
-            loss.backward()
+            # Backward với gradient scaling
+            optimizer.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            
+            # Gradient clipping với unscale
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
+            
+            scaler.step(optimizer)
+            scaler.update()
             
             train_loss.update(loss.item())
             pbar.set_postfix({'loss': f'{train_loss.avg:.4f}'})
@@ -505,8 +560,9 @@ def train_ddpm(num_epochs=None, save_every=10):
         
         with torch.no_grad():
             for images, _ in val_loader:
-                images = images.to(device)
-                loss = model(images)
+                images = images.to(device, non_blocking=True)
+                with torch.amp.autocast('cuda', enabled=use_amp):
+                    loss = model(images)
                 val_loss.update(loss.item())
         
         # Logging
@@ -522,12 +578,14 @@ def train_ddpm(num_epochs=None, save_every=10):
                 DataConfig.CHECKPOINT_DIR,
                 f'ddpm_epoch_{epoch}.pth'
             )
-            save_checkpoint(model, optimizer, epoch, val_loss.avg, save_path)
+            save_checkpoint(model, optimizer, epoch, val_loss.avg, save_path,
+                          extra_info={'scaler_state_dict': scaler.state_dict()})
             
             if val_loss.avg < best_loss:
                 best_loss = val_loss.avg
                 best_path = os.path.join(DataConfig.CHECKPOINT_DIR, 'ddpm_best.pth')
-                save_checkpoint(model, optimizer, epoch, best_loss, best_path)
+                save_checkpoint(model, optimizer, epoch, best_loss, best_path,
+                              extra_info={'scaler_state_dict': scaler.state_dict()})
     
     writer.close()
     print(f"\n✅ DDPM training hoàn thành! Best loss: {best_loss:.4f}")
