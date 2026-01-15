@@ -72,7 +72,7 @@ class DataConfig:
     IMG_CHANNELS = 3  # Số kênh màu (RGB)
     
     # ================= THAM SỐ DATA LOADING =================
-    BATCH_SIZE = 32  # Kích thước batch (giảm nếu thiếu VRAM)
+    BATCH_SIZE = 64  # Kích thước batch (giảm nếu thiếu VRAM)
     NUM_WORKERS = 2  # Số worker để load dữ liệu song song
 
 
