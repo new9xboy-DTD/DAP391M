@@ -69,6 +69,7 @@ class DataConfig:
     
     # ================= THAM SỐ ẢNH =================
     IMG_SIZE = 256  # Kích thước ảnh đầu vào (256x256)
+    VQVAE_IMG_SIZE = 128  # Kích thước ảnh cho VQ-VAE training (128x128) - tối ưu cho GTX1070
     IMG_CHANNELS = 3  # Số kênh màu (RGB)
     
     # ================= THAM SỐ DATA LOADING =================
@@ -151,9 +152,9 @@ class TransformerConfig:
     
     # ================= THAM SỐ SEQUENCE =================
     # Độ dài tối đa của chuỗi token
-    # Với ảnh 256x256 và downsampling 4x của VQ-VAE, ta có 64x64 = 4096 tokens
-    # Có thể giảm bằng cách tăng downsampling hoặc dùng patch
-    MAX_SEQ_LEN = 1024  # Giới hạn để tiết kiệm bộ nhớ
+    # Với ảnh 128x128 và reduction factor 8x của VQ-VAE Encoder, ta có 16x16 = 256 tokens
+    # Reduction factor = 2^(len(hidden_dims)-1) = 2^3 = 8 với hidden_dims có 4 phần tử
+    MAX_SEQ_LEN = 256  # Giới hạn để tiết kiệm bộ nhớ (giảm từ 1024 xuống 256, tối ưu cho GTX1070)
     
     # Kích thước vocabulary (phải khớp với NUM_EMBEDDINGS của VQ-VAE)
     VOCAB_SIZE = VQVAEConfig.NUM_EMBEDDINGS
@@ -451,6 +452,7 @@ def print_config():
     print("\n🗂️  Data Config:")
     print(f"   - Dataset root: {DataConfig.DATASET_ROOT}")
     print(f"   - Image size: {DataConfig.IMG_SIZE}x{DataConfig.IMG_SIZE}")
+    print(f"   - VQ-VAE image size: {DataConfig.VQVAE_IMG_SIZE}x{DataConfig.VQVAE_IMG_SIZE}")
     print(f"   - Batch size: {DataConfig.BATCH_SIZE}")
     
     print("\n🎨 VQ-VAE Config:")
