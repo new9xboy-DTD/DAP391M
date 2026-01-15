@@ -532,6 +532,20 @@ class VQVAE(nn.Module):
         print(f"📊 Tổng parameters: {total_params:,}")
         print(f"📊 Trainable parameters: {trainable_params:,}")
     
+    def get_codebook(self):
+        """
+        Lấy codebook embeddings từ VQ module
+        
+        Helper method để tránh duplicate logic khi truy cập codebook.
+        
+        Returns:
+            Tensor: Codebook embeddings (num_embeddings, embedding_dim)
+        """
+        if isinstance(self.vq, VectorQuantizerEMA):
+            return self.vq.embedding
+        else:
+            return self.vq.embedding.weight
+    
     def encode(self, x):
         """
         Encode ảnh thành discrete tokens
@@ -574,11 +588,8 @@ class VQVAE(nn.Module):
         batch_size = token_indices.shape[0]
         h, w = spatial_shape
         
-        # Lấy embeddings từ codebook
-        if isinstance(self.vq, VectorQuantizerEMA):
-            codebook = self.vq.embedding
-        else:
-            codebook = self.vq.embedding.weight
+        # Lấy embeddings từ codebook sử dụng helper method
+        codebook = self.get_codebook()
         
         quantized = F.embedding(token_indices, codebook)  # (B, seq_len, D)
         
