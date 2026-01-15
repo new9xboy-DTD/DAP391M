@@ -481,8 +481,18 @@ class DeepfakeFusionModule(nn.Module):
             
             # Concat features
             if features:
-                feat_concat = torch.cat([features.get('cnn', torch.zeros(1)),
-                                        features.get('gcn', torch.zeros(1))], dim=-1)
+                # Lấy batch_size từ scores để tạo fallback tensors đúng kích thước
+                batch_size = score_tensor.shape[0]
+                device = score_tensor.device
+                
+                # Tạo fallback tensors với đúng kích thước
+                cnn_fallback = torch.zeros(batch_size, CNNViTConfig.FEATURE_DIM, device=device)
+                gcn_fallback = torch.zeros(batch_size, GCNConfig.OUTPUT_DIM, device=device)
+                
+                feat_concat = torch.cat([
+                    features.get('cnn', cnn_fallback),
+                    features.get('gcn', gcn_fallback)
+                ], dim=-1)
             else:
                 feat_concat = None
             

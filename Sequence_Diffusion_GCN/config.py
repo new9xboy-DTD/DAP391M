@@ -27,18 +27,35 @@ class DataConfig:
         DATASET_ROOT/
         ├── Train/
         │   ├── Fake/
+        │   │   ├── fake_0001.jpg
+        │   │   └── ...
         │   └── Real/
+        │       ├── real_0001.jpg
+        │       └── ...
         ├── Validation/
         │   ├── Fake/
         │   └── Real/
         └── Test/
             ├── Fake/
             └── Real/
+    
+    Các nguồn dataset khuyên dùng:
+    - Kaggle Deepfake and Real Images: 
+      https://www.kaggle.com/datasets/manjilkarki/deepfake-and-real-images
+    - FaceForensics++: https://github.com/ondyari/FaceForensics
+    - Celeb-DF: https://github.com/yuezunli/celeb-deepfakeforensics
+    
+    Hướng dẫn cấu hình:
+    1. Tải dataset từ nguồn phù hợp
+    2. Giải nén và tổ chức theo cấu trúc thư mục trên
+    3. Cập nhật DATASET_ROOT để trỏ đến thư mục dataset
     """
     
     # ================= ĐƯỜNG DẪN DỮ LIỆU =================
     # Thay đổi đường dẫn này để trỏ đến dataset của bạn
-    DATASET_ROOT = "Dataset"  # Sẽ được cập nhật sau khi có dataset
+    # Ví dụ: "C:/Users/YourName/datasets/deepfake" (Windows)
+    #        "/home/user/datasets/deepfake" (Linux)
+    DATASET_ROOT = "Dataset"  # Placeholder - Cập nhật đường dẫn thực tế của bạn
     
     # Các thư mục con
     TRAIN_DIR = os.path.join(DATASET_ROOT, "Train")
