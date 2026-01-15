@@ -25,6 +25,12 @@ Cách sử dụng:
     python train.py --phase 3  # Train fusion module
     python train.py --phase all  # Train tất cả
     
+    # Train trên Google Colab (dùng MyDrive cho checkpoints và logs)
+    python train.py --phase all --colab
+    
+    # Train với dataset từ Kaggle (path là đường dẫn dataset)
+    python train.py --phase all --colab --data_dir /kaggle/input/dataset
+    
 Tác giả: DAP391M Team
 Phiên bản: 1.0
 =====================================================================
@@ -694,8 +700,38 @@ def main():
                        help='Number of epochs (override config)')
     parser.add_argument('--device', type=str, default=None,
                        help='Device (cuda/cpu)')
+    parser.add_argument('--colab', action='store_true',
+                       help='Enable Google Colab mode (use MyDrive paths for checkpoints and logs)')
+    parser.add_argument('--data_dir', type=str, default=None,
+                       help='Custom dataset directory path (e.g., path from Kaggle clone)')
     
     args = parser.parse_args()
+    
+    # Configure paths for Google Colab if enabled
+    if args.colab:
+        # Save checkpoints and outputs to MyDrive
+        DataConfig.CHECKPOINT_DIR = "/content/drive/MyDrive/checkpoints"
+        DataConfig.LOG_DIR = "/content/drive/MyDrive/logs"
+        DataConfig.RESULTS_DIR = "/content/drive/MyDrive/results"
+        
+        # Use default Colab dataset path if --data_dir is not specified
+        if not args.data_dir:
+            DataConfig.DATASET_ROOT = "/content/drive/MyDrive/datasets/faces"
+            DataConfig.TRAIN_DIR = os.path.join(DataConfig.DATASET_ROOT, "Train")
+            DataConfig.VAL_DIR = os.path.join(DataConfig.DATASET_ROOT, "Validation")
+            DataConfig.TEST_DIR = os.path.join(DataConfig.DATASET_ROOT, "Test")
+        
+        print("\n☁️  Google Colab mode enabled!")
+        print(f"   → Checkpoints: {DataConfig.CHECKPOINT_DIR}")
+        print(f"   → Logs: {DataConfig.LOG_DIR}")
+    
+    # Override dataset path if --data_dir is specified
+    if args.data_dir:
+        DataConfig.DATASET_ROOT = args.data_dir
+        DataConfig.TRAIN_DIR = os.path.join(DataConfig.DATASET_ROOT, "Train")
+        DataConfig.VAL_DIR = os.path.join(DataConfig.DATASET_ROOT, "Validation")
+        DataConfig.TEST_DIR = os.path.join(DataConfig.DATASET_ROOT, "Test")
+        print(f"\n📂 Custom dataset directory: {DataConfig.DATASET_ROOT}")
     
     # Print banner
     print("\n" + "=" * 70)
