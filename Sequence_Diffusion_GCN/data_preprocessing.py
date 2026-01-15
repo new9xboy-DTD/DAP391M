@@ -316,14 +316,22 @@ def create_dataloaders(mode='supervised', extract_landmarks=False):
         extract_landmarks=extract_landmarks
     )
     
-    # Tạo DataLoaders
+    # Tạo DataLoaders với tối ưu hóa tốc độ
+    # persistent_workers: Giữ workers sống giữa các epochs để tránh overhead khởi tạo
+    # prefetch_factor: Số batches được prefetch bởi mỗi worker
+    # pin_memory: Pin memory để tăng tốc transfer data lên GPU
+    use_persistent = DataConfig.NUM_WORKERS > 0 and getattr(DataConfig, 'PERSISTENT_WORKERS', True)
+    prefetch = getattr(DataConfig, 'PREFETCH_FACTOR', 2) if DataConfig.NUM_WORKERS > 0 else None
+    
     train_loader = DataLoader(
         train_dataset,
         batch_size=DataConfig.BATCH_SIZE,
         shuffle=True,  # Shuffle trong training
         num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=True,  # Tăng tốc transfer data lên GPU
-        drop_last=True  # Bỏ batch cuối nếu không đủ size
+        pin_memory=getattr(DataConfig, 'PIN_MEMORY', True),  # Tăng tốc transfer data lên GPU
+        drop_last=True,  # Bỏ batch cuối nếu không đủ size
+        persistent_workers=use_persistent,  # Tránh overhead khởi tạo workers mỗi epoch
+        prefetch_factor=prefetch  # Prefetch data để overlap với GPU computation
     )
     
     val_loader = DataLoader(
@@ -331,7 +339,9 @@ def create_dataloaders(mode='supervised', extract_landmarks=False):
         batch_size=DataConfig.BATCH_SIZE,
         shuffle=False,
         num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=True
+        pin_memory=getattr(DataConfig, 'PIN_MEMORY', True),
+        persistent_workers=use_persistent,
+        prefetch_factor=prefetch
     )
     
     test_loader = DataLoader(
@@ -339,7 +349,9 @@ def create_dataloaders(mode='supervised', extract_landmarks=False):
         batch_size=DataConfig.BATCH_SIZE,
         shuffle=False,
         num_workers=DataConfig.NUM_WORKERS,
-        pin_memory=True
+        pin_memory=getattr(DataConfig, 'PIN_MEMORY', True),
+        persistent_workers=use_persistent,
+        prefetch_factor=prefetch
     )
     
     # In thống kê
