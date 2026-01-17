@@ -13,7 +13,7 @@ class Config:
     """
     
     # ==================== DATA PATHS ====================
-    DATA_DIR = os.path.join("..", "CNN + Transformer", "Dataset")
+    DATA_DIR = os.path.join("..", "Dataset")
     TRAIN_DIR = os.path.join(DATA_DIR, "Train")
     VAL_DIR = os.path.join(DATA_DIR, "Validation")
     TEST_DIR = os.path.join(DATA_DIR, "Test")
