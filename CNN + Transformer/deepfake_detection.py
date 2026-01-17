@@ -32,7 +32,7 @@ class Config:
     # Tham số model
     IMG_SIZE = 256  # Kích thước ảnh đầu vào (256x256 theo mô tả)
     BATCH_SIZE = 32  # Số ảnh trong mỗi batch
-    NUM_EPOCHS = 50  # Số epoch training
+    NUM_EPOCHS = 10  # Số epoch training
     LEARNING_RATE = 0.0001  # Tốc độ học
     NUM_CLASSES = 2  # 2 classes: Fake và Real
     
@@ -572,7 +572,7 @@ def evaluate_on_test_set(model_path=None):
         model_path = os.path.join(Config.SAVE_DIR, 'best_model.pth')
     
     print(f"\n📂 Đang load model từ: {model_path}")
-    checkpoint = torch.load(model_path, map_location=Config.DEVICE)
+    checkpoint = torch.load(model_path, map_location=Config.DEVICE, weights_only=False)
     
     model = CNNTransformerModel().to(Config.DEVICE)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -630,13 +630,13 @@ if __name__ == "__main__":
     
     try:
         # Training model
-        model, history = train_model()
+        # model, history = train_model()
         
         # Đánh giá trên test set sau khi training xong
         print("\n" + "="*70)
         response = input("🤔 Bạn có muốn đánh giá model trên test set không? (y/n): ")
         if response.lower() == 'y':
-            evaluate_on_test_set()
+            evaluate_on_test_set("checkpoints/checkpoint_epoch_2.pth")
         
     except KeyboardInterrupt:
         print("\n\n⚠️  Training bị dừng bởi user!")
