@@ -133,7 +133,7 @@ print(f"Confidence: {result['confidence']:.2%}")
 ## 🔧 Configuration
 
 Key settings in `config.py`:
-- Image size: 224×224
+- Image size: 256×256
 - Batch size: 32
 - Stage 1: 5 epochs, LR=1e-3
 - Stage 2: 10 epochs, LR=1e-5

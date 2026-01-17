@@ -12,7 +12,7 @@ ViXNet uses a **2-branch fusion architecture**:
 4. **Classification Head**: Binary classification (Real/Fake)
 
 ```
-Input Image (224x224x3)
+Input Image (256x256x3)
         |
         ├─→ [Xception Branch] ─→ Global Features (2048-d)
         |                              |
@@ -179,7 +179,7 @@ Key hyperparameters in `config.py`:
 - Weight decay: 0.01
 
 ### Model
-- Image size: 224x224
+- Image size: 256x256
 - Xception output: 2048-d
 - ViT output: 768-d (ViT-Base)
 - Fusion dimension: 512-d

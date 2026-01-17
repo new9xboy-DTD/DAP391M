@@ -243,7 +243,7 @@ Format:
 ## Hyperparameters Quan Trọng
 
 ### Model Architecture
-- Image size: 224×224
+- Image size: 256×256
 - Xception output: 2048-d
 - ViT output: 768-d (ViT-Base)
 - Fusion dimension: 512-d

@@ -321,7 +321,7 @@ if __name__ == "__main__":
     
     # Test forward pass
     batch_size = 2
-    dummy_input = torch.randn(batch_size, 3, 224, 224)
+    dummy_input = torch.randn(batch_size, 3, 256, 256)
     
     print(f"\n🧪 Testing forward pass with input shape: {dummy_input.shape}")
     output = model(dummy_input)

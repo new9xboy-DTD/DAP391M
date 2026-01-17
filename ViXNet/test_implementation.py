@@ -86,7 +86,7 @@ def test_forward_pass():
         
         # Create dummy input
         batch_size = 4
-        dummy_input = torch.randn(batch_size, 3, 224, 224)
+        dummy_input = torch.randn(batch_size, 3, 256, 256)
         
         print(f"   Input shape: {dummy_input.shape}")
         

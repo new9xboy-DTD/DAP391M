@@ -168,7 +168,7 @@ def main():
     
     # Test with dummy prediction
     print("\n🧪 Testing with random input...")
-    dummy_input = torch.randn(1, 3, 224, 224).to(Config.DEVICE)
+    dummy_input = torch.randn(1, 3, 256, 256).to(Config.DEVICE)
     with torch.no_grad():
         outputs = model(dummy_input)
         probs = torch.softmax(outputs, dim=1)

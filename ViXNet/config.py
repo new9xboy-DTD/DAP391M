@@ -19,7 +19,7 @@ class Config:
     TEST_DIR = os.path.join(DATA_DIR, "Test")
     
     # ==================== MODEL PARAMETERS ====================
-    IMG_SIZE = 224  # ViT and Xception both work well with 224x224
+    IMG_SIZE = 256  # Image size matches dataset (256x256)
     NUM_CLASSES = 2  # Binary classification: Real/Fake
     
     # Model architecture dimensions
