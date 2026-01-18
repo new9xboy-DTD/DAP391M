@@ -1,0 +1,154 @@
+.model-dropzone {
+  width: 100%;
+}
+
+.dropzone {
+  border: 3px dashed #ccc;
+  border-radius: 15px;
+  padding: 40px;
+  text-align: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  background: #f9f9f9;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dropzone:hover {
+  border-color: #764ba2;
+  background: #faf0ff;
+}
+
+.dropzone.drag-active {
+  border-color: #764ba2;
+  background: #f0e8ff;
+  transform: scale(1.02);
+}
+
+.dropzone.analyzing {
+  border-color: #667eea;
+  background: #f0f5ff;
+}
+
+.file-input {
+  display: none;
+}
+
+.upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  width: 100%;
+}
+
+.upload-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.upload-text {
+  font-size: 1.2rem;
+  color: #333;
+  margin: 10px 0;
+  font-weight: 500;
+}
+
+.upload-hint {
+  font-size: 0.9rem;
+  color: #999;
+  margin: 5px 0;
+}
+
+.analyzing-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.spinner-small {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(102, 126, 234, 0.3);
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.analyzing-text {
+  font-size: 1.2rem;
+  color: #333;
+  margin: 10px 0;
+  font-weight: 600;
+}
+
+.analyzing-hint {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 5px 0;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.file-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.file-name {
+  font-size: 1.2rem;
+  color: #333;
+  margin: 10px 0;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.file-hint {
+  font-size: 0.9rem;
+  color: #27ae60;
+  margin: 5px 0;
+  font-weight: 500;
+}
+
+.error-message {
+  background: #fee;
+  color: #c33;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 15px;
+  border: 1px solid #fcc;
+}
+
+.reset-button {
+  margin-top: 20px;
+  padding: 12px 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.reset-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.reset-button:active {
+  transform: translateY(0);
+}
