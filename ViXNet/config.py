@@ -57,7 +57,7 @@ class Config:
     LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
     
     # ==================== DATA LOADING ====================
-    NUM_WORKERS = 4  # Number of workers for data loading
+    NUM_WORKERS = 8  # Number of workers for data loading
     PIN_MEMORY = True  # Pin memory for faster GPU transfer
     
     # ==================== TRAINING SETTINGS ====================
