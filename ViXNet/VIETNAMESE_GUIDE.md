@@ -149,12 +149,30 @@ python train.py
 Script sẽ tự động:
 1. Kiểm tra dataset
 2. Khởi tạo model với pretrained weights
-3. Training Stage 1 (5 epochs)
-4. Lưu best model Stage 1
-5. Training Stage 2 (10 epochs)
-6. Lưu best model Stage 2
-7. Test trên test set sau mỗi epoch
-8. Lưu training history
+3. **Kiểm tra checkpoints Stage 1** - bỏ qua nếu đã có đủ 5 epochs
+4. Training Stage 1 (5 epochs) - hoặc bỏ qua nếu đã hoàn thành
+5. Lưu best model Stage 1
+6. Training Stage 2 (10 epochs)
+7. Lưu best model Stage 2
+8. Test trên test set sau mỗi epoch
+9. Lưu training history
+
+**Tiếp tục training nếu Stage 1 đã xong:**
+
+Nếu Stage 1 đã hoàn thành (có đủ 5 epoch checkpoints), chỉ cần chạy:
+
+```bash
+cd ViXNet
+python train.py
+```
+
+Script sẽ tự động:
+- Phát hiện checkpoints Stage 1 hiện có
+- Bỏ qua training Stage 1 (tiết kiệm ~1-2 giờ)
+- Load best model từ Stage 1
+- Tiếp tục thẳng tới Stage 2
+
+Không cần cấu hình hay flags gì thêm!
 
 ### 6. Inference (Dự Đoán)
 

@@ -100,11 +100,29 @@ python train.py
 The training script will:
 1. Check dataset availability
 2. Initialize ViXNet with pretrained weights
-3. Run Stage 1 training (frozen feature extractors)
-4. Run Stage 2 training (fine-tune high-level layers)
-5. Save best models after each epoch
-6. Automatically test on test set after each epoch
-7. Save training history and metrics
+3. **Check for existing Stage 1 checkpoints** - skip if all 5 epochs exist
+4. Run Stage 1 training (frozen feature extractors) - or skip if complete
+5. Run Stage 2 training (fine-tune high-level layers)
+6. Save best models after each epoch
+7. Automatically test on test set after each epoch
+8. Save training history and metrics
+
+### Resuming Training
+
+If Stage 1 is already complete (all 5 epoch checkpoints exist), simply run:
+
+```bash
+cd ViXNet
+python train.py
+```
+
+The script will automatically:
+- Detect existing Stage 1 checkpoints
+- Skip Stage 1 training (saves ~1-2 hours)
+- Load the best Stage 1 model
+- Continue directly to Stage 2
+
+No special flags or configuration needed!
 
 ### Testing the Model Implementation
 
@@ -193,6 +211,7 @@ Key hyperparameters in `config.py`:
 ## Features
 
 ✅ **2-stage training strategy** as described in the paper  
+✅ **Automatic Stage 1 skip** when all checkpoints exist  
 ✅ **Automatic best model saving** after each epoch  
 ✅ **Epoch-wise testing** on test set  
 ✅ **Mixed precision training** for faster training  
