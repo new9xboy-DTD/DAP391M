@@ -312,6 +312,37 @@ def print_metrics(train_metrics, val_metrics, test_metrics=None, epoch=None):
     print("="*70)
 
 
+def convert_to_json_serializable(obj):
+    """
+    Recursively convert numpy types to Python native types for JSON serialization
+    
+    This function handles the conversion of numpy data types (int64, float64, etc.) 
+    that are not natively JSON serializable into Python native types.
+    
+    Args:
+        obj: Object to convert (can be dict, list, numpy type, etc.)
+        
+    Returns:
+        JSON-serializable version of the object
+    """
+    if isinstance(obj, dict):
+        return {key: convert_to_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_json_serializable(item) for item in obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    else:
+        return obj
+
+
 def save_training_history(history, filename='training_history.json'):
     """
     Save training history to JSON file
@@ -322,14 +353,11 @@ def save_training_history(history, filename='training_history.json'):
     """
     filepath = os.path.join(Config.SAVE_DIR, filename)
     
-    # Convert numpy arrays to lists
-    for entry in history:
-        for split in ['train', 'val', 'test']:
-            if split in entry and 'confusion_matrix' in entry[split]:
-                entry[split]['confusion_matrix'] = entry[split]['confusion_matrix'].tolist()
+    # Convert all numpy types to JSON-serializable Python types
+    json_serializable_history = convert_to_json_serializable(history)
     
     with open(filepath, 'w') as f:
-        json.dump(history, f, indent=2)
+        json.dump(json_serializable_history, f, indent=2)
     
     print(f"💾 Saved training history: {filepath}")
 
