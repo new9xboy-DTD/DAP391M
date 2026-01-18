@@ -24,8 +24,8 @@ def test_stage1_skip_integration():
     # Save original SAVE_DIR
     original_save_dir = Config.SAVE_DIR
     
-    # Create a temporary directory for testing
-    temp_dir = tempfile.mkdtemp()
+    # Create a temporary directory for testing with restricted permissions
+    temp_dir = tempfile.mkdtemp(prefix='vixnet_test_', suffix='_checkpoints')
     Config.SAVE_DIR = temp_dir
     
     try:

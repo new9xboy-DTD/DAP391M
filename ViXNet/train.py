@@ -293,9 +293,14 @@ def train_vixnet():
         # Load existing Stage 1 history if available
         stage1_history_path = os.path.join(Config.SAVE_DIR, 'stage1_history.json')
         if os.path.exists(stage1_history_path):
-            with open(stage1_history_path, 'r') as f:
-                stage1_history = json.load(f)
-            print(f"   Loaded existing Stage 1 history with {len(stage1_history)} epochs")
+            try:
+                with open(stage1_history_path, 'r') as f:
+                    stage1_history = json.load(f)
+                print(f"   Loaded existing Stage 1 history with {len(stage1_history)} epochs")
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"   ⚠️  Warning: Could not load Stage 1 history: {e}")
+                print("   Continuing without history...")
+                stage1_history = []
         else:
             stage1_history = []
             print("   Note: Stage 1 history file not found, continuing without history")
