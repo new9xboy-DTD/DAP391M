@@ -5,6 +5,7 @@ Implements 2-stage training strategy as described in the paper
 
 import os
 import sys
+import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,7 +15,7 @@ from config import Config
 from dataset import create_data_loaders, check_dataset_availability
 from utils import (
     train_one_epoch, validate, save_checkpoint, load_checkpoint,
-    print_metrics, save_training_history, EarlyStopping
+    print_metrics, save_training_history, EarlyStopping, check_stage1_complete
 )
 
 
@@ -278,19 +279,42 @@ def train_vixnet():
     print("🎯 STAGE 1: TRAINING FUSION + CLASSIFIER")
     print("="*70)
     
-    # Freeze feature extractors
-    model.freeze_feature_extractors()
+    # Check if Stage 1 is already complete
+    stage1_complete = check_stage1_complete()
     
-    # Train Stage 1
-    model, stage1_history = train_stage(
-        model, train_loader, val_loader, test_loader,
-        stage=1,
-        stage_config=stage1_config,
-        start_epoch=1
-    )
-    
-    # Save Stage 1 history
-    save_training_history(stage1_history, 'stage1_history.json')
+    if stage1_complete:
+        print("\n✅ Stage 1 already complete! Found all 5 epoch checkpoints.")
+        print("   Skipping Stage 1 training and loading best Stage 1 model...")
+        
+        # Load best model from Stage 1
+        best_stage1_path = os.path.join(Config.SAVE_DIR, 'best_model_stage1.pth')
+        load_checkpoint(model, best_stage1_path)
+        
+        # Load existing Stage 1 history if available
+        stage1_history_path = os.path.join(Config.SAVE_DIR, 'stage1_history.json')
+        if os.path.exists(stage1_history_path):
+            with open(stage1_history_path, 'r') as f:
+                stage1_history = json.load(f)
+            print(f"   Loaded existing Stage 1 history with {len(stage1_history)} epochs")
+        else:
+            stage1_history = []
+            print("   Note: Stage 1 history file not found, continuing without history")
+    else:
+        print("\n🔄 Stage 1 checkpoints not found or incomplete. Starting Stage 1 training...")
+        
+        # Freeze feature extractors
+        model.freeze_feature_extractors()
+        
+        # Train Stage 1
+        model, stage1_history = train_stage(
+            model, train_loader, val_loader, test_loader,
+            stage=1,
+            stage_config=stage1_config,
+            start_epoch=1
+        )
+        
+        # Save Stage 1 history
+        save_training_history(stage1_history, 'stage1_history.json')
     
     # ==================== STAGE 2: FINE-TUNE HIGH-LEVEL LAYERS ====================
     
