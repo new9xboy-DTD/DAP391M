@@ -269,6 +269,32 @@ def load_checkpoint(model, checkpoint_path, optimizer=None):
     return checkpoint
 
 
+def check_stage1_complete():
+    """
+    Check if Stage 1 training is already complete by verifying all epoch checkpoints exist
+    
+    Returns:
+        Boolean indicating if all Stage 1 checkpoints (epochs 1-5) exist
+    """
+    if not os.path.exists(Config.SAVE_DIR):
+        return False
+    
+    # Check if all Stage 1 epoch checkpoints exist
+    stage1_epochs = Config.STAGE1_EPOCHS
+    for epoch in range(1, stage1_epochs + 1):
+        checkpoint_filename = f'checkpoint_stage1_epoch{epoch}.pth'
+        checkpoint_path = os.path.join(Config.SAVE_DIR, checkpoint_filename)
+        if not os.path.exists(checkpoint_path):
+            return False
+    
+    # Also check if best Stage 1 model exists
+    best_stage1_path = os.path.join(Config.SAVE_DIR, 'best_model_stage1.pth')
+    if not os.path.exists(best_stage1_path):
+        return False
+    
+    return True
+
+
 def print_metrics(train_metrics, val_metrics, test_metrics=None, epoch=None):
     """
     Print training, validation, and test metrics in a formatted way
