@@ -336,5 +336,10 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("🌐 Server running on http://localhost:5000")
     print("="*70)
+    print("\n⚠️  Note: Running in development mode.")
+    print("   For production, use a WSGI server like Gunicorn:")
+    print("   gunicorn -w 4 -b 0.0.0.0:5000 app:app")
+    print("")
     
+    # Run in development mode - for production use gunicorn or similar
     app.run(host='0.0.0.0', port=5000, debug=True)

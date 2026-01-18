@@ -76,7 +76,11 @@ trap cleanup EXIT INT TERM
 # Start backend in background
 echo "🔧 Starting Flask backend on http://localhost:5000..."
 cd backend
-python3 app.py > backend.log 2>&1 &
+if command -v python3 &> /dev/null; then
+    python3 app.py > backend.log 2>&1 &
+else
+    python app.py > backend.log 2>&1 &
+fi
 BACKEND_PID=$!
 cd ..
 echo "   Backend PID: $BACKEND_PID"

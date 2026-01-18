@@ -40,9 +40,13 @@ const ImageDropzone = ({ onPredictionComplete }) => {
   };
 
   const handleFile = async (file) => {
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file');
+    // Validate file type (both MIME type and extension)
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+    const fileName = file.name.toLowerCase();
+    const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
+    
+    if (!file.type.startsWith('image/') || !hasValidExtension) {
+      setError('Please upload a valid image file (JPG, PNG, JPEG, etc.)');
       return;
     }
 
