@@ -67,9 +67,9 @@ def test_save_training_history():
     # Create a temporary directory for testing
     with tempfile.TemporaryDirectory() as tmpdir:
         # Mock the Config.SAVE_DIR
-        import config
-        original_save_dir = config.Config.SAVE_DIR
-        config.Config.SAVE_DIR = tmpdir
+        from config import Config
+        original_save_dir = Config.SAVE_DIR
+        Config.SAVE_DIR = tmpdir
         
         try:
             # Save the history
@@ -132,7 +132,7 @@ def test_save_training_history():
             return False
         finally:
             # Restore original save dir
-            config.Config.SAVE_DIR = original_save_dir
+            Config.SAVE_DIR = original_save_dir
 
 
 if __name__ == "__main__":
