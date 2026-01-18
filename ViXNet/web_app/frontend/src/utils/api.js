@@ -26,13 +26,13 @@ export const predictImage = async (imageFile) => {
   try {
     const formData = new FormData();
     formData.append('image', imageFile);
-    
+
     const response = await axios.post(`${API_BASE_URL}/predict`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
-    
+
     return response.data;
   } catch (error) {
     console.error('Prediction failed:', error);
@@ -44,14 +44,18 @@ export const analyzeModel = async (modelFile) => {
   try {
     const formData = new FormData();
     formData.append('model', modelFile);
-    
+
     const response = await axios.post(`${API_BASE_URL}/analyze-model`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      responseType: 'json',
     });
-    
-    return response.data;
+    console.log("typeof response.data:", typeof response.data);
+    const safeData = response.data
+      .replace(/Infinity/g, 'null')
+      .replace(/NaN/g, 'null');
+    return JSON.parse(safeData);
   } catch (error) {
     console.error('Model analysis failed:', error);
     throw error;
