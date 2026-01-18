@@ -51,15 +51,26 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
 
     try {
       const result = await analyzeModel(file);
+      console.log("server response:", result);
+      console.log("result.success:", result.success);
+      console.log("result.model_info:", result.model_info);
       
-      if (result.warning) {
+      // Check if response has model_info (successful analysis)
+      if (result.model_info) {
+        console.log('Model analysis successful:', result);
+        onAnalysisComplete(result);
+      } else if (result.warning) {
+        console.warn('Warning from API:', result.warning, result.error);
         setError(result.warning + ': ' + result.error);
+        // Still display the result even if there's a warning
+        onAnalysisComplete(result);
+      } else {
+        console.error('Unexpected response structure:', result);
+        setError('Unexpected response from server');
       }
-      
-      onAnalysisComplete(result);
     } catch (err) {
+      console.error('Error analyzing model:', err);
       setError(err.response?.data?.error || 'Model analysis failed');
-      onAnalysisComplete(null);
     } finally {
       setAnalyzing(false);
     }

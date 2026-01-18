@@ -53,7 +53,7 @@ class ViTBranch(nn.Module):
     Captures subtle artifacts in deepfakes
     """
     
-    def __init__(self, pretrained=True, feature_dim=192, model_name='vit_tiny_patch16_224'):
+    def __init__(self, pretrained=True, feature_dim=192, model_name=Config.VIT_MODEL_NAME):
         super(ViTBranch, self).__init__()
         
         # Load pretrained ViT from timm
