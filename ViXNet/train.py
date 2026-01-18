@@ -297,8 +297,14 @@ def train_vixnet():
                 with open(stage1_history_path, 'r') as f:
                     stage1_history = json.load(f)
                 print(f"   Loaded existing Stage 1 history with {len(stage1_history)} epochs")
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"   ⚠️  Warning: Could not load Stage 1 history: {e}")
+            except json.JSONDecodeError as e:
+                print(f"   ⚠️  Warning: Stage 1 history file is corrupted (invalid JSON)")
+                print(f"   Error details: {e}")
+                print("   Continuing without history...")
+                stage1_history = []
+            except IOError as e:
+                print(f"   ⚠️  Warning: Cannot read Stage 1 history file (permission/access issue)")
+                print(f"   Error details: {e}")
                 print("   Continuing without history...")
                 stage1_history = []
         else:
