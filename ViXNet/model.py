@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import timm
 from torchvision import models
+from config import Config
 
 
 class XceptionBranch(nn.Module):
@@ -163,7 +164,7 @@ class ViXNet(nn.Module):
         vit_dim=768,
         fusion_dim=512,
         num_classes=2,
-        vit_model_name='vit_base_patch16_224'
+        vit_model_name=Config.VIT_MODEL_NAME
     ):
         super(ViXNet, self).__init__()
         
@@ -303,7 +304,7 @@ def create_vixnet(pretrained=True, num_classes=2):
         vit_dim=768,
         fusion_dim=512,
         num_classes=num_classes,
-        vit_model_name='vit_base_patch16_224'
+        vit_model_name=Config.VIT_MODEL_NAME
     )
     return model
 
