@@ -150,24 +150,27 @@ const ResultsDisplay = ({ predictionResult, analysisResult }) => {
                 <div className="roc-curve-section">
                   <h4>ROC Curve</h4>
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart
-                      data={analysisResult.model_info.auc_results.roc_curve.fpr.map((fpr, i) => ({
-                        fpr: fpr,
-                        tpr: analysisResult.model_info.auc_results.roc_curve.tpr[i]
-                      }))}
-                    >
+                    <LineChart>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis 
                         dataKey="fpr" 
+                        type="number"
+                        domain={[0, 1]}
                         label={{ value: 'False Positive Rate', position: 'insideBottom', offset: -5 }}
                       />
                       <YAxis 
+                        type="number"
+                        domain={[0, 1]}
                         label={{ value: 'True Positive Rate', angle: -90, position: 'insideLeft' }}
                       />
                       <Tooltip />
                       <Legend />
                       <Line 
-                        type="monotone" 
+                        type="monotone"
+                        data={analysisResult.model_info.auc_results.roc_curve.fpr.map((fpr, i) => ({
+                          fpr: fpr,
+                          tpr: analysisResult.model_info.auc_results.roc_curve.tpr[i]
+                        }))}
                         dataKey="tpr" 
                         stroke="#667eea" 
                         strokeWidth={3}
@@ -175,7 +178,7 @@ const ResultsDisplay = ({ predictionResult, analysisResult }) => {
                         name="ROC Curve"
                       />
                       <Line 
-                        type="monotone" 
+                        type="monotone"
                         data={[{fpr: 0, tpr: 0}, {fpr: 1, tpr: 1}]}
                         dataKey="tpr"
                         stroke="#999" 
