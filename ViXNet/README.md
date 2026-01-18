@@ -16,7 +16,7 @@ Input Image (224x224x3)
         |
         ├─→ [Xception Branch] ─→ Global Features (2048-d)
         |                              |
-        └─→ [ViT Branch] ──────→ Attention Features (768-d)
+        └─→ [ViT Branch] ──────→ Attention Features (192-d)
                                        |
                                        ├─→ [Feature Fusion] → (512-d)
                                        |
@@ -199,7 +199,7 @@ Key hyperparameters in `config.py`:
 ### Model
 - Image size: 224x224
 - Xception output: 2048-d
-- ViT output: 768-d (ViT-Base)
+- ViT output: 192-d (ViT-Tiny)
 - Fusion dimension: 512-d
 
 ### Augmentation
@@ -254,7 +254,7 @@ Key contributions:
 ### Out of Memory (OOM)
 - Reduce batch size in `config.py`
 - Disable mixed precision training
-- Use smaller ViT model (`vit_small_patch16_224`)
+- Model already uses ViT-Tiny (`vit_tiny_patch16_224`) for efficiency
 
 ### Dataset Not Found
 - Ensure dataset is at `../CNN + Transformer/Dataset/`

@@ -16,8 +16,8 @@ ViXNet là một kiến trúc học sâu kết hợp CNN (Xception) và Vision T
 2. **Nhánh Vision Transformer (ViT)**
    - Học self-attention theo từng patch
    - Bắt các artifact tinh vi trong deepfake
-   - Sử dụng pretrained ViT-Base
-   - Output: vector 768 chiều
+   - Sử dụng pretrained ViT-Tiny
+   - Output: vector 192 chiều
 
 3. **Feature Fusion**
    - Kết hợp đặc trưng từ cả 2 nhánh
@@ -263,7 +263,7 @@ Format:
 ### Model Architecture
 - Image size: 224×224
 - Xception output: 2048-d
-- ViT output: 768-d (ViT-Base)
+- ViT output: 192-d (ViT-Tiny)
 - Fusion dimension: 512-d
 
 ### Stage 1
@@ -321,7 +321,8 @@ MIXED_PRECISION = False
 
 **Dùng ViT nhỏ hơn:**
 ```python
-VIT_MODEL_NAME = 'vit_small_patch16_224'  # thay vì vit_base
+# Mô hình hiện tại đã sử dụng ViT-Tiny (vit_tiny_patch16_224) để tối ưu hiệu năng
+# Có thể sử dụng vit_small_patch16_224 nếu cần model lớn hơn
 ```
 
 ### 2. Training Chậm
