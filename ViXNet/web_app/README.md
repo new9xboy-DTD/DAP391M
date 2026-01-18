@@ -2,6 +2,15 @@
 
 A ReactJS web interface for visualizing and interacting with the ViXNet deepfake detection model.
 
+## 🔒 Security Update
+
+**Important:** This application now requires **PyTorch 2.6.0 or later** to address critical security vulnerabilities including:
+- Heap buffer overflow (CVE - fixed in 2.2.0)
+- Use-after-free vulnerability (CVE - fixed in 2.2.0)
+- Remote code execution via torch.load (CVE - fixed in 2.6.0)
+
+See [SECURITY.md](../../SECURITY.md) for complete details and migration guide.
+
 ## Features
 
 ✅ **Model Architecture Visualization** - Interactive display of ViXNet's two-branch architecture (Xception + ViT)  
@@ -39,7 +48,7 @@ A ReactJS web interface for visualizing and interacting with the ViXNet deepfake
 
 ### Backend Requirements
 - Python 3.8+
-- PyTorch 2.1.2+
+- **PyTorch 2.6.0+** (required for security - see [SECURITY.md](../../SECURITY.md))
 - Flask 3.0.0+
 - Other dependencies (see `backend/requirements.txt`)
 
