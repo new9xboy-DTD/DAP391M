@@ -49,6 +49,10 @@ ViXNet/
 ├── dataset.py        # Data loading and preprocessing
 ├── utils.py          # Training utilities and metrics
 ├── train.py          # Main training script
+├── web_app/          # Web application (React + Flask)
+│   ├── backend/      # Flask API server
+│   ├── frontend/     # React UI
+│   └── README.md     # Web app documentation
 └── README.md         # This file
 ```
 
@@ -241,6 +245,32 @@ Key contributions:
 - Transfer learning from ImageNet
 - Controlled fine-tuning strategy
 - State-of-the-art performance on FaceForensics++ and Celeb-DF
+
+## Web Application
+
+ViXNet now includes a **web-based visualization interface** built with ReactJS and Flask!
+
+### Features
+- 🖼️ **Drag & Drop Image Inference** - Upload images to detect deepfakes
+- 🔧 **Model Analysis** - Upload and analyze model checkpoints
+- 📊 **AUC Calculation** - Automatic performance metrics on test dataset
+- 📈 **ROC Curve Visualization** - Interactive performance charts
+- 🏗️ **Architecture Visualization** - Visual representation of the model
+
+### Quick Start
+
+```bash
+# Navigate to web app directory
+cd ViXNet/web_app
+
+# Start both backend and frontend (Linux/Mac)
+./start.sh
+
+# Or on Windows
+start.bat
+```
+
+See [web_app/README.md](web_app/README.md) for detailed documentation.
 
 ## Notes
 
