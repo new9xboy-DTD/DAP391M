@@ -178,6 +178,8 @@ def test_stage1_skip_integration():
 if __name__ == "__main__":
     success = test_stage1_skip_integration()
     sys.exit(0 if success else 1)
+
+"""
 Integration test to verify the JSON save function works with real training history format
 """
 
