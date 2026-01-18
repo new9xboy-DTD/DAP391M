@@ -73,7 +73,7 @@ def test_stage1_skip_integration():
                 'config': {
                     'img_size': 224,
                     'xception_dim': 2048,
-                    'vit_dim': 768,
+                    'vit_dim': 192,
                     'fusion_dim': 512,
                     'num_classes': 2
                 },
@@ -93,7 +93,7 @@ def test_stage1_skip_integration():
             'config': {
                 'img_size': 224,
                 'xception_dim': 2048,
-                'vit_dim': 768,
+                'vit_dim': 192,
                 'fusion_dim': 512,
                 'num_classes': 2
             },
