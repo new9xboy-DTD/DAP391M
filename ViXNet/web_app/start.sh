@@ -60,6 +60,19 @@ echo "🎯 Starting Services"
 echo "======================================"
 echo ""
 
+# Function to cleanup on exit
+cleanup() {
+    echo ""
+    echo "Shutting down services..."
+    if [ ! -z "$BACKEND_PID" ] && ps -p $BACKEND_PID > /dev/null; then
+        kill $BACKEND_PID 2>/dev/null
+        echo "✅ Backend stopped (PID: $BACKEND_PID)"
+    fi
+}
+
+# Set trap to cleanup on script exit
+trap cleanup EXIT INT TERM
+
 # Start backend in background
 echo "🔧 Starting Flask backend on http://localhost:5000..."
 cd backend
@@ -78,8 +91,4 @@ echo ""
 cd frontend
 npm start
 
-# Cleanup on exit
-echo ""
-echo "Shutting down services..."
-kill $BACKEND_PID 2>/dev/null
-echo "✅ Services stopped"
+# Cleanup will be called automatically on exit

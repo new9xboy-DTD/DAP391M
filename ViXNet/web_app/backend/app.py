@@ -42,7 +42,14 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 def load_default_model():
-    """Load the default trained model"""
+    """
+    Load the default trained model
+    
+    Security Note: Using weights_only=False for torch.load() to maintain
+    compatibility with existing checkpoints. In production environments,
+    only load models from trusted sources or use weights_only=True with
+    appropriate checkpoint format validation.
+    """
     global current_model, model_info
     
     checkpoint_path = os.path.join(os.path.dirname(__file__), '..', '..', 'checkpoints', 'best_model.pth')
@@ -224,7 +231,12 @@ def predict():
 
 @app.route('/api/analyze-model', methods=['POST'])
 def analyze_model():
-    """Analyze an uploaded model and calculate AUC"""
+    """
+    Analyze an uploaded model and calculate AUC
+    
+    Security Note: Only upload models from trusted sources. The weights_only=False
+    flag is used for checkpoint compatibility but can execute arbitrary code.
+    """
     if 'model' not in request.files:
         return jsonify({'error': 'No model file provided'}), 400
     

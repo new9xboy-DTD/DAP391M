@@ -237,6 +237,23 @@ Calculate AUC for the currently loaded model.
 
 ## Building for Production
 
+### Security Considerations
+
+⚠️ **Important Security Notes:**
+
+1. **Model Upload Security**: The application uses `torch.load()` with `weights_only=False` for checkpoint compatibility. **Only upload model files from trusted sources** as malicious .pth files could execute arbitrary code.
+
+2. **Production Deployment**: For production environments:
+   - Add authentication and authorization
+   - Implement rate limiting
+   - Use HTTPS for all communications
+   - Validate and sanitize all file uploads
+   - Consider using `weights_only=True` with appropriate checkpoint validation
+   - Run backend with restricted permissions
+   - Implement proper CORS policies (not wildcard)
+
+3. **File Storage**: Uploaded models are stored temporarily. Implement proper file cleanup and storage management for production.
+
 ### Backend
 The Flask backend can be deployed using production WSGI servers like Gunicorn:
 
