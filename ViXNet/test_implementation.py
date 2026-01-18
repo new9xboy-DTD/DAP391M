@@ -61,9 +61,10 @@ def test_model_creation():
         print(f"   Total parameters: {total_params:,}")
         print(f"   Trainable parameters: {trainable_params:,}")
         
-        # Verify parameter count is reasonable
-        assert total_params > 100_000_000, "Model too small"
-        assert total_params < 150_000_000, "Model too large"
+        # Verify parameter count is reasonable for ViT-Tiny model
+        # ViT-Tiny has significantly fewer parameters than ViT-Base
+        assert total_params > 25_000_000, "Model too small (should be ~27-28M)"
+        assert total_params < 35_000_000, "Model too large (should be ~27-28M)"
         
         return True
     except Exception as e:
