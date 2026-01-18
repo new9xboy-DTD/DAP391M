@@ -52,7 +52,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, epoch, st
         
         # Mixed precision training
         if Config.MIXED_PRECISION and scaler is not None:
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast(device_type=Config.DEVICE.type):
                 outputs = model(images)
                 loss = criterion(outputs, labels)
             
@@ -134,7 +134,7 @@ def validate(model, val_loader, criterion, epoch=None, stage_name="Validation"):
             
             # Mixed precision inference
             if Config.MIXED_PRECISION:
-                with torch.cuda.amp.autocast():
+                with torch.amp.autocast(device_type=Config.DEVICE.type):
                     outputs = model(images)
                     loss = criterion(outputs, labels)
             else:
