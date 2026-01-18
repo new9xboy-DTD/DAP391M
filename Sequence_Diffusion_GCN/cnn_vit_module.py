@@ -33,6 +33,7 @@ import torch.nn.functional as F
 import timm
 
 # Import config
+from ViXNet.config import Config
 from config import CNNViTConfig, DataConfig
 
 
@@ -214,7 +215,7 @@ class ViTFeatureExtractor(FeatureExtractor):
     
     def __init__(
         self,
-        backbone_name='vit_base_patch16_224',
+        backbone_name=Config.VIT_MODEL_NAME,
         pretrained=True,
         output_dim=CNNViTConfig.FEATURE_DIM,
         freeze_backbone=False
