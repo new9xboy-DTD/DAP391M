@@ -24,9 +24,9 @@ class Config:
     
     # Model architecture dimensions
     XCEPTION_DIM = 2048  # Xception output dimension
-    VIT_DIM = 768  # ViT-Base output dimension
+    VIT_DIM = 192  # ViT-Tiny output dimension
     FUSION_DIM = 512  # Fusion layer dimension
-    VIT_MODEL_NAME = 'vit_base_patch16_224'  # ViT model variant
+    VIT_MODEL_NAME = 'vit_tiny_patch16_224'  # ViT model variant
     
     # ==================== TRAINING PARAMETERS ====================
     

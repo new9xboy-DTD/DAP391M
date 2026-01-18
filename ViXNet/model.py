@@ -52,11 +52,11 @@ class ViTBranch(nn.Module):
     Captures subtle artifacts in deepfakes
     """
     
-    def __init__(self, pretrained=True, feature_dim=768, model_name='vit_base_patch16_224'):
+    def __init__(self, pretrained=True, feature_dim=192, model_name='vit_tiny_patch16_224'):
         super(ViTBranch, self).__init__()
         
         # Load pretrained ViT from timm
-        # vit_base_patch16_224 outputs 768-dimensional features
+        # vit_tiny_patch16_224 outputs 192-dimensional features
         self.vit = timm.create_model(
             model_name,
             pretrained=pretrained,
@@ -83,7 +83,7 @@ class FeatureFusion(nn.Module):
     Uses concatenation followed by dimension reduction
     """
     
-    def __init__(self, xception_dim=2048, vit_dim=768, fusion_dim=512):
+    def __init__(self, xception_dim=2048, vit_dim=192, fusion_dim=512):
         super(FeatureFusion, self).__init__()
         
         # Concatenated dimension
@@ -160,10 +160,10 @@ class ViXNet(nn.Module):
         self,
         pretrained=True,
         xception_dim=2048,
-        vit_dim=768,
+        vit_dim=192,
         fusion_dim=512,
         num_classes=2,
-        vit_model_name='vit_base_patch16_224'
+        vit_model_name='vit_tiny_patch16_224'
     ):
         super(ViXNet, self).__init__()
         
@@ -300,10 +300,10 @@ def create_vixnet(pretrained=True, num_classes=2):
     model = ViXNet(
         pretrained=pretrained,
         xception_dim=2048,
-        vit_dim=768,
+        vit_dim=192,
         fusion_dim=512,
         num_classes=num_classes,
-        vit_model_name='vit_base_patch16_224'
+        vit_model_name='vit_tiny_patch16_224'
     )
     return model
 
