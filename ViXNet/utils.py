@@ -316,6 +316,9 @@ def convert_to_json_serializable(obj):
     """
     Recursively convert numpy types to Python native types for JSON serialization
     
+    This function handles the conversion of numpy data types (int64, float64, etc.) 
+    that are not natively JSON serializable into Python native types.
+    
     Args:
         obj: Object to convert (can be dict, list, numpy type, etc.)
         
@@ -326,11 +329,13 @@ def convert_to_json_serializable(obj):
         return {key: convert_to_json_serializable(value) for key, value in obj.items()}
     elif isinstance(obj, list):
         return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_json_serializable(item) for item in obj)
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
-    elif isinstance(obj, (np.integer, np.int64, np.int32, np.int16, np.int8)):
+    elif isinstance(obj, np.integer):
         return int(obj)
-    elif isinstance(obj, (np.floating, np.float64, np.float32, np.float16)):
+    elif isinstance(obj, np.floating):
         return float(obj)
     elif isinstance(obj, np.bool_):
         return bool(obj)
