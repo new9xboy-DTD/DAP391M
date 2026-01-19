@@ -23,7 +23,7 @@ import base64
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from model import create_vixnet
 from config import Config
-from dataset import create_dataloaders
+from dataset import create_data_loaders
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
@@ -39,6 +39,23 @@ model_info = {
 # Uploads directory
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def convert_to_serializable(obj):
+    """
+    Convert numpy and torch types to Python native types for JSON serialization
+    """
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    elif isinstance(obj, dict):
+        return {k: convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_to_serializable(item) for item in obj]
+    elif isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().numpy().tolist()
+    return obj
 
 
 def load_default_model():
@@ -118,13 +135,15 @@ def calculate_auc_on_test_set(model):
         print("📊 Calculating AUC on test set...")
         
         # Load test dataset
-        _, _, test_loader = create_dataloaders(
+        data_loaders = create_data_loaders(
             batch_size=32,
             num_workers=2
         )
         
-        if test_loader is None:
+        if data_loaders is None:
             return None, "Test dataset not available"
+        
+        test_loader = data_loaders.get('test')
         
         model.eval()
         all_labels = []
@@ -186,7 +205,7 @@ def health_check():
 @app.route('/api/model-info', methods=['GET'])
 def get_model_info():
     """Get information about the current model"""
-    return jsonify(model_info)
+    return jsonify(convert_to_serializable(model_info))
 
 
 @app.route('/api/predict', methods=['POST'])
@@ -286,6 +305,9 @@ def analyze_model():
                 'num_classes': 2
             }
         }
+        
+        # Convert all to serializable types
+        model_info = convert_to_serializable(model_info)
         
         return jsonify({
             'success': True,

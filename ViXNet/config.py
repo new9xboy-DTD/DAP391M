@@ -13,7 +13,7 @@ class Config:
     """
     
     # ==================== DATA PATHS ====================
-    DATA_DIR = os.path.join("..", "Dataset")
+    DATA_DIR = os.path.join("D:/Repo/DAP391M", "Dataset")
     TRAIN_DIR = os.path.join(DATA_DIR, "Train")
     VAL_DIR = os.path.join(DATA_DIR, "Validation")
     TEST_DIR = os.path.join(DATA_DIR, "Test")
@@ -24,9 +24,9 @@ class Config:
     
     # Model architecture dimensions
     XCEPTION_DIM = 2048  # Xception output dimension
-    VIT_DIM = 192  # ViT-Tiny output dimension
+    VIT_DIM = 768  # ViT output dimension
     FUSION_DIM = 512  # Fusion layer dimension
-    VIT_MODEL_NAME = 'vit_tiny_patch16_224'  # ViT model variant
+    VIT_MODEL_NAME = 'vit_base_patch16_224'  # ViT model variant
     
     # ==================== TRAINING PARAMETERS ====================
     
@@ -37,7 +37,7 @@ class Config:
     STAGE1_WEIGHT_DECAY = 0.01
     
     # Stage 2: Fine-tuning high-level layers
-    STAGE2_EPOCHS = 10
+    STAGE2_EPOCHS = 20
     STAGE2_BATCH_SIZE = 32
     STAGE2_LR = 1e-5  # Very low learning rate for fine-tuning
     STAGE2_WEIGHT_DECAY = 0.01
@@ -50,7 +50,7 @@ class Config:
     # Scheduler parameters
     STEP_SIZE = 5  # For StepLR
     GAMMA = 0.5  # LR decay factor
-    T_MAX = 15  # For CosineAnnealingLR (total epochs)
+    T_MAX = 30  # For CosineAnnealingLR (total epochs)
     
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
@@ -75,7 +75,7 @@ class Config:
     MIN_DELTA = 0.001  # Minimum improvement to reset patience
     
     # ==================== TESTING ====================
-    TEST_AFTER_EPOCH = True  # Test on test set after each epoch
+    TEST_AFTER_EPOCH = False  # Test on test set after each epoch
     
     # ==================== AUGMENTATION ====================
     # Data augmentation probabilities

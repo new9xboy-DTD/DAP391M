@@ -5,5 +5,7 @@ CNN + Transformer/FaceForensics
 CNN + Transformer/Dataset.zip
 __pycache__/
 *.pyc
-checkpoints/
+**/checkpoints*/
 Dataset/
+ViXNet/checkpoints*/
+**/node_modules/

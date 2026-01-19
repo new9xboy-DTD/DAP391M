@@ -53,11 +53,10 @@ class ViTBranch(nn.Module):
     Captures subtle artifacts in deepfakes
     """
     
-    def __init__(self, pretrained=True, feature_dim=192, model_name='vit_tiny_patch16_224'):
+    def __init__(self, pretrained=True, feature_dim=Config.VIT_DIM, model_name=Config.VIT_MODEL_NAME):
         super(ViTBranch, self).__init__()
         
         # Load pretrained ViT from timm
-        # vit_tiny_patch16_224 outputs 192-dimensional features
         self.vit = timm.create_model(
             model_name,
             pretrained=pretrained,
@@ -84,7 +83,7 @@ class FeatureFusion(nn.Module):
     Uses concatenation followed by dimension reduction
     """
     
-    def __init__(self, xception_dim=2048, vit_dim=192, fusion_dim=512):
+    def __init__(self, xception_dim=Config.XCEPTION_DIM, vit_dim=Config.VIT_DIM, fusion_dim=Config.FUSION_DIM):
         super(FeatureFusion, self).__init__()
         
         # Concatenated dimension
@@ -124,7 +123,7 @@ class ClassificationHead(nn.Module):
     Classification head for binary classification (Real/Fake)
     """
     
-    def __init__(self, fusion_dim=512, num_classes=2, dropout=0.5):
+    def __init__(self, fusion_dim=Config.FUSION_DIM, num_classes=Config.NUM_CLASSES, dropout=0.5):
         super(ClassificationHead, self).__init__()
         
         self.classifier = nn.Sequential(
@@ -160,9 +159,9 @@ class ViXNet(nn.Module):
     def __init__(
         self,
         pretrained=True,
-        xception_dim=2048,
-        vit_dim=192,
-        fusion_dim=512,
+        xception_dim=Config.XCEPTION_DIM,
+        vit_dim=Config.VIT_DIM,
+        fusion_dim=Config.FUSION_DIM,
         num_classes=2,
         vit_model_name=Config.VIT_MODEL_NAME
     ):
@@ -300,9 +299,9 @@ def create_vixnet(pretrained=True, num_classes=2):
     """
     model = ViXNet(
         pretrained=pretrained,
-        xception_dim=2048,
-        vit_dim=192,
-        fusion_dim=512,
+        xception_dim=Config.XCEPTION_DIM,
+        vit_dim=Config.VIT_DIM,
+        fusion_dim=Config.FUSION_DIM,
         num_classes=num_classes,
         vit_model_name=Config.VIT_MODEL_NAME
     )
