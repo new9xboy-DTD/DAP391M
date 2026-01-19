@@ -126,7 +126,7 @@ def train_stage(
     scheduler = get_scheduler(optimizer, stage_config['epochs'])
     
     # Mixed precision scaler
-    scaler = torch.cuda.amp.GradScaler() if Config.MIXED_PRECISION else None
+    scaler = torch.amp.GradScaler() if Config.MIXED_PRECISION else None
     
     # Early stopping
     early_stopping = EarlyStopping(
