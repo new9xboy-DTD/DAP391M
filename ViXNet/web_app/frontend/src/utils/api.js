@@ -12,6 +12,16 @@ export const checkHealth = async () => {
   }
 };
 
+export const getDatasets = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/datasets`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to get datasets:', error);
+    throw error;
+  }
+};
+
 export const getModelInfo = async () => {
   try {
     const response = await axios.get(`${API_BASE_URL}/model-info`);
@@ -40,10 +50,11 @@ export const predictImage = async (imageFile) => {
   }
 };
 
-export const analyzeModel = async (modelFile) => {
+export const analyzeModel = async (modelFile, dataset = 'default') => {
   try {
     const formData = new FormData();
     formData.append('model', modelFile);
+    formData.append('dataset', dataset);
 
     const response = await axios.post(`${API_BASE_URL}/analyze-model`, formData, {
       headers: {
@@ -52,6 +63,13 @@ export const analyzeModel = async (modelFile) => {
       responseType: 'json',
     });
     console.log("typeof response.data:", typeof response.data);
+    
+    // Handle response - if it's already an object, return it
+    if (typeof response.data === 'object') {
+      return response.data;
+    }
+    
+    // If it's a string, sanitize and parse
     const safeData = response.data
       .replace(/Infinity/g, 'null')
       .replace(/NaN/g, 'null');
@@ -62,9 +80,9 @@ export const analyzeModel = async (modelFile) => {
   }
 };
 
-export const calculateAUC = async () => {
+export const calculateAUC = async (dataset = 'default') => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/calculate-auc`);
+    const response = await axios.post(`${API_BASE_URL}/calculate-auc`, { dataset });
     return response.data;
   } catch (error) {
     console.error('AUC calculation failed:', error);

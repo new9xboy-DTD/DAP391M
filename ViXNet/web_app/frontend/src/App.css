@@ -134,3 +134,33 @@
     font-size: 1.5rem;
   }
 }
+
+.info-section {
+  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+  border: 2px dashed #667eea;
+  padding: 30px;
+  border-radius: 12px;
+  margin-top: 30px;
+}
+
+.info-section h3 {
+  color: #333;
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+.info-section p {
+  color: #555;
+  margin-bottom: 10px;
+}
+
+.info-section ol {
+  text-align: left;
+  color: #555;
+  line-height: 1.8;
+  padding-left: 20px;
+}
+
+.info-section li {
+  margin-bottom: 8px;
+}
