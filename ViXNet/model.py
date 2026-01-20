@@ -249,8 +249,8 @@ class ViXNet(nn.Module):
     def unfreeze_high_level_layers(self):
         """
         Unfreeze high-level layers for Stage 2 fine-tuning
-        - Xception: last 2-3 blocks
-        - ViT: last 1-2 transformer encoder blocks
+        - Xception: last 15 layers
+        - ViT: last 3 transformer encoder blocks
         """
         print("🔓 Unfreezing high-level layers (Stage 2)...")
         
@@ -258,8 +258,8 @@ class ViXNet(nn.Module):
         # Xception has blocks numbered, we'll unfreeze the last few
         xception_modules = list(self.xception_branch.xception.named_children())
         
-        # Typically unfreeze the last 20% of layers for fine-tuning
-        num_to_unfreeze = max(1, len(xception_modules) // 5)
+        # Typically unfreeze the last 15 layers for fine-tuning
+        num_to_unfreeze = 15
         
         for name, module in xception_modules[-num_to_unfreeze:]:
             for param in module.parameters():
@@ -268,8 +268,8 @@ class ViXNet(nn.Module):
         # Unfreeze last transformer blocks of ViT
         if hasattr(self.vit_branch.vit, 'blocks'):
             vit_blocks = self.vit_branch.vit.blocks
-            # Unfreeze last 2 blocks
-            num_blocks_to_unfreeze = min(2, len(vit_blocks))
+            # Unfreeze last 3 blocks
+            num_blocks_to_unfreeze = min(3, len(vit_blocks))
             for block in vit_blocks[-num_blocks_to_unfreeze:]:
                 for param in block.parameters():
                     param.requires_grad = True
@@ -337,7 +337,7 @@ class XceptionOnly(nn.Module):
         for param in self.xception_branch.parameters():
             param.requires_grad = False
     
-    def unfreeze_last_layers(self, num_layers_to_unfreeze=30):
+    def unfreeze_high_level_layers(self, num_layers_to_unfreeze=30):
         """
         Unfreeze Xception for stage 2 training
         
@@ -358,6 +358,109 @@ class XceptionOnly(nn.Module):
             List of trainable parameters
         """
         return [p for p in self.parameters() if p.requires_grad]
+    
+class ViTOnly(nn.Module):
+    """
+    ViT-only model for ablation studies
+    """
+    
+    def __init__(self, pretrained=True, num_classes=2, model_name='vit_base_patch16_224'):
+        super(ViTOnly, self).__init__()
+        
+        print("🏗️  Initializing ViT-only model...")
+        
+        # ViT branch
+        self.vit_branch = ViTBranch(
+            pretrained=pretrained,
+            feature_dim=Config.VIT_DIM,
+            model_name=model_name
+        )
+        
+        # Classification head
+        self.classifier = ClassificationHead(
+            fusion_dim=Config.VIT_DIM,
+            num_classes=num_classes
+        )
+        
+        print(f"✅ ViT-only model initialized successfully!")
+        print(f"   Total parameters: {sum(p.numel() for p in self.parameters()):,}")
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+        
+    def forward(self, x):
+        """
+        Forward pass through ViTOnly
+        
+        Args:
+            x: Input images (batch_size, 3, H, W)
+        Returns:
+            logits: Classification logits (batch_size, num_classes)
+        """
+        # Extract features from ViT
+        vit_features = self.vit_branch(x)
+        
+        # Classify
+        logits = self.classifier(vit_features)
+        
+        return logits
+    
+    def freeze_feature_extractors(self):
+        """
+        Freeze ViT for Stage 1 training
+        Only classification head remain trainable
+        """
+        print("🔒 Freezing feature extractors (Stage 1)...")
+        
+        # Freeze ViT
+        for param in self.vit_branch.parameters():
+            param.requires_grad = False
+            
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+        
+    def unfreeze_high_level_layers(self):
+        """
+        Unfreeze high-level layers for Stage 2 fine-tuning
+        - ViT: last 1/2 transformer encoder blocks
+        """
+        print("🔓 Unfreezing high-level layers (Stage 2)...")
+        
+        # Unfreeze last transformer blocks of ViT
+        if hasattr(self.vit_branch.vit, 'blocks'):
+            vit_blocks = self.vit_branch.vit.blocks
+            # Unfreeze last 1/2 blocks
+            num_blocks_to_unfreeze = len(vit_blocks) // 2
+            for block in vit_blocks[-num_blocks_to_unfreeze:]:
+                for param in block.parameters():
+                    param.requires_grad = True
+                    
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+    
+    def get_trainable_params(self):
+        """
+        Get list of trainable parameters for optimizer
+        
+        Returns:
+            List of trainable parameters
+        """
+        return [p for p in self.parameters() if p.requires_grad]
+    
+def create_vit_only(pretrained=True, num_classes=2, model_name='vit_base_patch16_224'):
+    """
+    Factory function to create ViT-only model
+    
+    Args:
+        pretrained: Whether to use pretrained weights
+        num_classes: Number of output classes (default: 2)
+        model_name: Name of the ViT model architecture
+        
+    Returns:
+        ViT-only model
+    """
+    model = ViTOnly(
+        pretrained=pretrained,
+        num_classes=num_classes,
+        model_name=model_name
+    )
+    return model
     
 def create_xception_only(pretrained=True, num_classes=2):
     """

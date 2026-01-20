@@ -73,7 +73,7 @@ class Config:
     
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
-    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
+    LABEL_SMOOTHING = 0  # Label smoothing for CrossEntropyLoss
     
     # ==================== DATA LOADING ====================
     NUM_WORKERS = 8  # Number of workers for data loading

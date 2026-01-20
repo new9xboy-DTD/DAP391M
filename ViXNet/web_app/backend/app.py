@@ -23,9 +23,9 @@ import base64
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-from ViXNet.model import create_data_loaders
-from ViXNet.model_factory import create_model, load_model_from_checkpoint, detect_model_type
-from ViXNet.config import Config
+from dataset import create_data_loaders
+from model_factory import create_model, load_model_from_checkpoint, detect_model_type
+from config import Config
 from torchvision import datasets
 
 app = Flask(__name__)
