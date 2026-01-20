@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { analyzeModel, getDatasets } from '../utils/api';
 
 const ModelDropzone = ({ onAnalysisComplete }) => {
@@ -9,6 +9,7 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
   const [datasets, setDatasets] = useState([]);
   const [selectedDataset, setSelectedDataset] = useState('default');
   const [pendingFile, setPendingFile] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     // Load available datasets on mount
@@ -116,6 +117,7 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
         <input
           type="file"
           id="model-upload"
+          ref={fileInputRef}
           accept=".pth,.pt"
           onChange={handleChange}
           className="hidden"
@@ -196,6 +198,10 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
             setPendingFile(null);
             onAnalysisComplete(null);
             setError(null);
+            // Reset the file input element to allow selecting the same file again
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+            }
           }}
         >
           Upload Another Model
