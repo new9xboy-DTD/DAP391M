@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { analyzeModel } from '../utils/api';
+import React, { useState, useCallback, useEffect } from 'react';
+import { analyzeModel, getDatasets } from '../utils/api';
 import './ModelDropzone.css';
 
 const ModelDropzone = ({ onAnalysisComplete }) => {
@@ -7,6 +7,22 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [fileName, setFileName] = useState(null);
   const [error, setError] = useState(null);
+  const [datasets, setDatasets] = useState([]);
+  const [selectedDataset, setSelectedDataset] = useState('default');
+  const [pendingFile, setPendingFile] = useState(null);
+
+  useEffect(() => {
+    // Load available datasets on mount
+    const loadDatasets = async () => {
+      try {
+        const response = await getDatasets();
+        setDatasets(response.datasets || []);
+      } catch (err) {
+        console.error('Failed to load datasets:', err);
+      }
+    };
+    loadDatasets();
+  }, []);
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -26,7 +42,7 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
 
     const files = e.dataTransfer.files;
     if (files && files[0]) {
-      await handleFile(files[0]);
+      setPendingFile(files[0]);
     }
   }, []);
 
@@ -35,22 +51,24 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
     setError(null);
     
     if (e.target.files && e.target.files[0]) {
-      await handleFile(e.target.files[0]);
+      setPendingFile(e.target.files[0]);
     }
   };
 
-  const handleFile = async (file) => {
+  const handleAnalyze = async () => {
+    if (!pendingFile) return;
+
     // Validate file type
-    if (!file.name.endsWith('.pth') && !file.name.endsWith('.pt')) {
+    if (!pendingFile.name.endsWith('.pth') && !pendingFile.name.endsWith('.pt')) {
       setError('Please upload a PyTorch model file (.pth or .pt)');
       return;
     }
 
-    setFileName(file.name);
+    setFileName(pendingFile.name);
     setAnalyzing(true);
 
     try {
-      const result = await analyzeModel(file);
+      const result = await analyzeModel(pendingFile, selectedDataset);
       console.log("server response:", result);
       console.log("result.success:", result.success);
       console.log("result.model_info:", result.model_info);
@@ -59,11 +77,13 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
       if (result.model_info) {
         console.log('Model analysis successful:', result);
         onAnalysisComplete(result);
+        setPendingFile(null); // Clear pending file after successful analysis
       } else if (result.warning) {
         console.warn('Warning from API:', result.warning, result.error);
         setError(result.warning + ': ' + result.error);
         // Still display the result even if there's a warning
         onAnalysisComplete(result);
+        setPendingFile(null);
       } else {
         console.error('Unexpected response structure:', result);
         setError('Unexpected response from server');
@@ -106,6 +126,12 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
               <p className="file-name">{fileName}</p>
               <p className="file-hint">Model loaded successfully</p>
             </div>
+          ) : pendingFile ? (
+            <div className="file-info">
+              <div className="file-icon">📦</div>
+              <p className="file-name">{pendingFile.name}</p>
+              <p className="file-hint">Ready to analyze - select dataset below</p>
+            </div>
           ) : (
             <>
               <div className="upload-icon">🔧</div>
@@ -118,6 +144,32 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
         </label>
       </div>
 
+      {pendingFile && !analyzing && !fileName && datasets.length > 0 && (
+        <div className="dataset-selector">
+          <label htmlFor="dataset-select">
+            <strong>Select Dataset for Evaluation:</strong>
+          </label>
+          <select 
+            id="dataset-select"
+            value={selectedDataset} 
+            onChange={(e) => setSelectedDataset(e.target.value)}
+            className="dataset-dropdown"
+          >
+            {datasets.map((ds) => (
+              <option key={ds.key} value={ds.key}>
+                {ds.name}
+              </option>
+            ))}
+          </select>
+          <button 
+            className="analyze-button"
+            onClick={handleAnalyze}
+          >
+            Analyze Model
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="error-message">
           ⚠️ {error}
@@ -129,6 +181,7 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
           className="reset-button"
           onClick={() => {
             setFileName(null);
+            setPendingFile(null);
             onAnalysisComplete(null);
             setError(null);
           }}
