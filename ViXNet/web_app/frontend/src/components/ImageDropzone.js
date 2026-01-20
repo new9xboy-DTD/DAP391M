@@ -78,7 +78,7 @@ const ImageDropzone = ({ onPredictionComplete }) => {
           ${dragActive 
             ? 'border-primary-500 bg-primary-100 scale-[1.02]' 
             : uploading 
-              ? 'border-secondary-500 bg-purple-50' 
+              ? 'border-secondary-500 bg-secondary-50' 
               : 'border-gray-300 bg-gray-50 hover:border-primary-500 hover:bg-primary-50'
           }
         `}
