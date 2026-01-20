@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from model import create_vixnet
+from model import create_vixnet, create_xception_only
 from config import Config
 from dataset import create_data_loaders, check_dataset_availability
 from utils import (
@@ -52,13 +52,14 @@ def get_optimizer(model, lr, weight_decay):
     return optimizer
 
 
-def get_scheduler(optimizer, total_epochs):
+def get_scheduler(optimizer, total_epochs, lr=1e-3):
     """
     Create learning rate scheduler
     
     Args:
         optimizer: Optimizer
         total_epochs: Total number of epochs
+        lr: learing rate of stage
         
     Returns:
         Scheduler
@@ -66,7 +67,8 @@ def get_scheduler(optimizer, total_epochs):
     if Config.SCHEDULER == 'cosine':
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            T_max=total_epochs
+            T_max=total_epochs,
+            eta_min=lr * 0.001
         )
     elif Config.SCHEDULER == 'step':
         scheduler = optim.lr_scheduler.StepLR(
@@ -123,7 +125,7 @@ def train_stage(
     # Setup training components
     criterion = nn.CrossEntropyLoss(label_smoothing=Config.LABEL_SMOOTHING)
     optimizer = get_optimizer(model, stage_config['lr'], stage_config['weight_decay'])
-    scheduler = get_scheduler(optimizer, stage_config['epochs'])
+    scheduler = get_scheduler(optimizer, stage_config['epochs'], stage_config['lr'])
     
     # Mixed precision scaler
     scaler = torch.amp.GradScaler() if Config.MIXED_PRECISION else None
@@ -323,7 +325,6 @@ def train_vixnet():
             stage_config=stage1_config,
             start_epoch=1
         )
-        
         # Save Stage 1 history
         save_training_history(stage1_history, 'stage1_history.json')
     
@@ -332,7 +333,6 @@ def train_vixnet():
     print("\n" + "="*70)
     print("🎯 STAGE 2: FINE-TUNING HIGH-LEVEL LAYERS")
     print("="*70)
-    
     # Load best model from Stage 1
     best_stage1_path = os.path.join(Config.SAVE_DIR, 'best_model_stage1.pth')
     if os.path.exists(best_stage1_path):
@@ -405,11 +405,170 @@ def train_vixnet():
     print(f"💾 Models saved in: {Config.SAVE_DIR}")
     print(f"📊 Training history saved")
     print("="*70)
+    
+def train_xception_only():
+    """
+    Main training function implementing 2-stage training strategy
+    
+    Stage 1: Freeze all feature extractors of Xception, train classifier
+    Stage 2: Unfreeze 30 last layers, fine-tune with low LR 
+    """
 
+    print("\n" + "="*70)
+    print("XCEPTION ONLY TRAINING")
+    print("="*70)
+    
+    #print config
+    Config.print_config()
+    
+    #check dataset availability
+    dataset_available = check_dataset_availability()
+    
+    if not dataset_available:
+        print("\n⚠️  Dataset not available!")
+        print("   Please ensure the dataset is available at the specified paths.")
+        print("   Expected structure:")
+        print(f"   {Config.DATA_DIR}/")
+        print(f"   ├── Train/")
+        print(f"   │   ├── Fake/")
+        print(f"   │   └── Real/")
+        print(f"   ├── Validation/")
+        print(f"   │   ├── Fake/")
+        print(f"   │   └── Real/")
+        print(f"   └── Test/")
+        print(f"       ├── Fake/")
+        print(f"       └── Real/")
+        return
+    
+    #Create data loaders for stage 1
+    print("\n" + "="*70)
+    print("📦 PREPARING DATA LOADERS")
+    print("="*70)
+    
+    stage1_config = Config.get_stage_config(1, "Stage 1: Classifier Training")
+    data_loaders = create_data_loaders(
+        batch_size=stage1_config['batch_size']
+    )
+    
+    if data_loaders is None:
+        print("❌ Failed to create data loaders!")
+        return
+    
+    train_loader = data_loaders['train']
+    val_loader = data_loaders['val']
+    test_loader = data_loaders['test']
+    
+    #Create model
+    print("\n" + "="*70)
+    print("🏗️  INITIALIZING MODEL")
+    print("="*70)
+    
+    model = create_xception_only(pretrained=True, num_classes=Config.NUM_CLASSES)
+    model = model.to(Config.DEVICE)
+    
+    # ==================== STAGE 1: TRAIN FUSION + CLASSIFIER ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 1: TRAINING CLASSIFIER")
+    print("="*70)
+    
+    model.freeze_feature_extractors()
+    
+    _, stage1_history = train_stage(
+        model, train_loader, val_loader, test_loader,
+        stage=1,
+        stage_config=stage1_config,
+        start_epoch=1
+    )
+    
+    # Save Stage 1 history
+    save_training_history(stage1_history, 'stage1_history.json')
 
+    # ==================== STAGE 2: FINE-TUNE HIGH-LEVEL LAYERS ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 2: FINE-TUNING HIGH-LEVEL LAYERS")
+    print("="*70)
+    
+    # Load best model from Stage 1
+    best_stage1_path = os.path.join(Config.SAVE_DIR, 'best_model_stage1.pth')
+    if os.path.exists(best_stage1_path):
+        print("\n📂 Loading best model from Stage 1...")
+        load_checkpoint(model, best_stage1_path)
+    else:
+        print("\n⚠️  Best Stage 1 model not found, continuing with current model...")
+    
+    model.unfreeze_last_layers()
+    
+    # Create data loaders for Stage 2 (may have different batch size)
+    stage2_config = Config.get_stage_config(2)
+    if stage2_config['batch_size'] != stage1_config['batch_size']:
+        print("\n📦 Creating new data loaders for Stage 2...")
+        data_loaders = create_data_loaders(
+            batch_size=stage2_config['batch_size']
+        )
+        train_loader = data_loaders['train']
+        val_loader = data_loaders['val']
+        test_loader = data_loaders['test']
+        
+    # Train Stage 2
+    start_epoch = stage1_config['epochs'] + 1
+    model, stage2_history = train_stage(
+        model, train_loader, val_loader, test_loader,
+        stage=2,
+        stage_config=stage2_config,
+        start_epoch=start_epoch
+    )
+    
+    # Save Stage 2 history
+    save_training_history(stage2_history, 'stage2_history.json')
+    
+    # Combine histories
+    full_history = stage1_history + stage2_history
+    save_training_history(full_history, 'full_training_history.json')
+    
+    # ==================== FINAL EVALUATION ====================
+    
+    print("\n" + "="*70)
+    print("🏁 FINAL EVALUATION")
+    print("="*70)
+    
+    # Load best overall model
+    best_model_path = os.path.join(Config.SAVE_DIR, 'best_model.pth')
+    if os.path.exists(best_model_path):
+        print("\n📂 Loading best overall model...")
+        checkpoint = load_checkpoint(model, best_model_path)
+        
+        # Final test evaluation
+        print("\n🧪 Final evaluation on test set...")
+        criterion = nn.CrossEntropyLoss()
+        test_metrics = validate(model, test_loader, criterion, stage_name="Final Test")
+        
+        print("\n" + "="*70)
+        print("🏆 FINAL TEST RESULTS")
+        print("="*70)
+        print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
+        print(f"   Precision: {test_metrics['precision']:.4f}")
+        print(f"   Recall: {test_metrics['recall']:.4f}")
+        print(f"   F1-Score: {test_metrics['f1']:.4f}")
+        print(f"\n   Confusion Matrix:")
+        print(f"   {test_metrics['confusion_matrix']}")
+        print("="*70)
+    
+    print("\n" + "="*70)
+    print("✅ TRAINING COMPLETED!")
+    print("="*70)
+    print(f"💾 Models saved in: {Config.SAVE_DIR}")
+    print(f"📊 Training history saved")
+    print("="*70)
+    
 if __name__ == "__main__":
     try:
-        train_vixnet()
+        user_input = input("Select training mode:\n1. ViXNet (default)\n2. Xception Only\nEnter choice (1 or 2): ").strip()
+        if(user_input == '2'):
+            train_xception_only()
+        else:
+            train_vixnet()
     except KeyboardInterrupt:
         print("\n\n⚠️  Training interrupted by user!")
         sys.exit(0)
