@@ -18,6 +18,25 @@ class Config:
     VAL_DIR = os.path.join(DATA_DIR, "Validation")
     TEST_DIR = os.path.join(DATA_DIR, "Test")
     
+    # Multiple dataset configurations
+    DATASETS = {
+        'default': {
+            'name': 'Default Dataset',
+            'path': os.path.join("D:/Repo/DAP391M", "Dataset"),
+            'train': os.path.join("D:/Repo/DAP391M", "Dataset", "Train"),
+            'val': os.path.join("D:/Repo/DAP391M", "Dataset", "Validation"),
+            'test': os.path.join("D:/Repo/DAP391M", "Dataset", "Test")
+        },
+        # Add more datasets here in the future
+        # 'dataset2': {
+        #     'name': 'Another Dataset',
+        #     'path': '/path/to/dataset2',
+        #     'train': '/path/to/dataset2/Train',
+        #     'val': '/path/to/dataset2/Validation', 
+        #     'test': '/path/to/dataset2/Test'
+        # }
+    }
+    
     # ==================== MODEL PARAMETERS ====================
     IMG_SIZE = 224  # ViT and Xception both work well with 224x224
     NUM_CLASSES = 2  # Binary classification: Real/Fake
@@ -164,6 +183,38 @@ class Config:
             }
         else:
             raise ValueError(f"Invalid stage: {stage}. Must be 1 or 2.")
+    
+    @classmethod
+    def get_dataset_config(cls, dataset_key='default'):
+        """
+        Get dataset configuration by key
+        
+        Args:
+            dataset_key: Key for dataset in DATASETS dict
+            
+        Returns:
+            Dictionary with dataset paths
+        """
+        if dataset_key not in cls.DATASETS:
+            raise ValueError(f"Dataset '{dataset_key}' not found. Available: {list(cls.DATASETS.keys())}")
+        return cls.DATASETS[dataset_key]
+    
+    @classmethod
+    def list_available_datasets(cls):
+        """
+        List all available datasets
+        
+        Returns:
+            List of dictionaries with dataset info
+        """
+        return [
+            {
+                'key': key,
+                'name': config['name'],
+                'path': config['path']
+            }
+            for key, config in cls.DATASETS.items()
+        ]
 
 
 if __name__ == "__main__":

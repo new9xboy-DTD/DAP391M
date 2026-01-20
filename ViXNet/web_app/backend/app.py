@@ -4,6 +4,8 @@ Provides endpoints for:
 - Image inference (drag-and-drop)
 - Model analysis with AUC calculation
 - Model information and architecture
+- Multiple model architecture support (ViXNet, Xception Only, ViT Only)
+- Dataset selection for model evaluation
 """
 
 import os
@@ -21,17 +23,18 @@ import base64
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-from model import create_vixnet
+from model_factory import create_model, load_model_from_checkpoint, detect_model_type
 from config import Config
-from dataset import create_data_loaders
+from torchvision import datasets
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
 
-# Global model variable
+# Global model variable - No default model loaded
 current_model = None
 model_info = {
     'loaded': False,
+    'model_type': None,
     'checkpoint_path': None,
     'metrics': None
 }
@@ -58,64 +61,6 @@ def convert_to_serializable(obj):
     return obj
 
 
-def load_default_model():
-    """
-    Load the default trained model
-    
-    Security Note: Using weights_only=False for torch.load() to maintain
-    compatibility with existing checkpoints. In production environments,
-    only load models from trusted sources or use weights_only=True with
-    appropriate checkpoint format validation.
-    """
-    global current_model, model_info
-    
-    checkpoint_path = os.path.join(os.path.dirname(__file__), '..', '..', 'checkpoints', 'best_model.pth')
-    
-    try:
-        print(f"🔄 Loading default model from: {checkpoint_path}")
-        current_model = create_vixnet(pretrained=False, num_classes=Config.NUM_CLASSES)
-        current_model = current_model.to(Config.DEVICE)
-        
-        if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path, map_location=Config.DEVICE, weights_only=False)
-            current_model.load_state_dict(checkpoint['model_state_dict'])
-            current_model.eval()
-            
-            model_info = {
-                'loaded': True,
-                'checkpoint_path': checkpoint_path,
-                'metrics': checkpoint.get('metrics', {}),
-                'epoch': checkpoint.get('epoch', 'Unknown'),
-                'architecture': {
-                    'name': 'ViXNet',
-                    'xception_dim': 2048,
-                    'vit_dim': 192,
-                    'fusion_dim': 512,
-                    'num_classes': 2
-                }
-            }
-            print("✅ Default model loaded successfully")
-        else:
-            print("⚠️  No checkpoint found, using untrained model")
-            current_model.eval()
-            model_info = {
-                'loaded': True,
-                'checkpoint_path': None,
-                'metrics': {},
-                'epoch': 0,
-                'architecture': {
-                    'name': 'ViXNet',
-                    'xception_dim': 2048,
-                    'vit_dim': 192,
-                    'fusion_dim': 512,
-                    'num_classes': 2
-                }
-            }
-    except Exception as e:
-        print(f"❌ Error loading model: {str(e)}")
-        model_info['loaded'] = False
-
-
 def preprocess_image(image):
     """Preprocess image for inference"""
     transform = transforms.Compose([
@@ -129,21 +74,75 @@ def preprocess_image(image):
     return transform(image).unsqueeze(0)
 
 
-def calculate_auc_on_test_set(model):
-    """Calculate AUC on the test dataset"""
-    try:
-        print("📊 Calculating AUC on test set...")
+def create_test_loader(dataset_key='default', batch_size=32, num_workers=2):
+    """
+    Create test data loader for a specific dataset
+    
+    Args:
+        dataset_key: Key for dataset in Config.DATASETS
+        batch_size: Batch size for data loader
+        num_workers: Number of workers for data loading
         
-        # Load test dataset
-        data_loaders = create_data_loaders(
-            batch_size=32,
-            num_workers=2
+    Returns:
+        DataLoader or None if dataset not available
+    """
+    try:
+        dataset_config = Config.get_dataset_config(dataset_key)
+        test_dir = dataset_config['test']
+        
+        if not os.path.exists(test_dir):
+            print(f"⚠️  Test directory not found: {test_dir}")
+            return None
+        
+        # Define transforms
+        test_transform = transforms.Compose([
+            transforms.Resize((Config.IMG_SIZE, Config.IMG_SIZE)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+        
+        # Create dataset
+        test_dataset = datasets.ImageFolder(test_dir, transform=test_transform)
+        
+        # Create data loader
+        test_loader = torch.utils.data.DataLoader(
+            test_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=Config.PIN_MEMORY
         )
         
-        if data_loaders is None:
-            return None, "Test dataset not available"
+        print(f"✅ Test loader created: {len(test_dataset)} images")
+        return test_loader
         
-        test_loader = data_loaders.get('test')
+    except Exception as e:
+        print(f"❌ Error creating test loader: {str(e)}")
+        return None
+
+
+def calculate_auc_on_test_set(model, dataset_key='default'):
+    """
+    Calculate AUC on the test dataset
+    
+    Args:
+        model: Model to evaluate
+        dataset_key: Key for dataset in Config.DATASETS
+        
+    Returns:
+        tuple: (results dict, error message)
+    """
+    try:
+        print(f"📊 Calculating AUC on test set (dataset: {dataset_key})...")
+        
+        # Load test dataset
+        test_loader = create_test_loader(dataset_key=dataset_key, batch_size=32, num_workers=2)
+        
+        if test_loader is None:
+            return None, f"Test dataset '{dataset_key}' not available"
         
         model.eval()
         all_labels = []
@@ -182,7 +181,8 @@ def calculate_auc_on_test_set(model):
                 'tpr': tpr.tolist(),
                 'thresholds': thresholds.tolist()
             },
-            'num_samples': len(all_labels)
+            'num_samples': len(all_labels),
+            'dataset_key': dataset_key
         }
         
         print(f"✅ AUC: {auc:.4f}, Accuracy: {accuracy:.4f}")
@@ -200,6 +200,19 @@ def health_check():
         'status': 'healthy',
         'model_loaded': model_info['loaded']
     })
+
+
+@app.route('/api/datasets', methods=['GET'])
+def list_datasets():
+    """List all available datasets"""
+    try:
+        datasets = Config.list_available_datasets()
+        return jsonify({
+            'datasets': datasets,
+            'count': len(datasets)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/model-info', methods=['GET'])
@@ -262,49 +275,36 @@ def analyze_model():
     try:
         global current_model, model_info
         
+        # Get dataset selection (default to 'default')
+        dataset_key = request.form.get('dataset', 'default')
+        
         # Save uploaded model
         model_file = request.files['model']
         model_path = os.path.join(UPLOAD_FOLDER, 'uploaded_model.pth')
         model_file.save(model_path)
         
-        # Load the model
+        # Load the model using model factory
         print(f"🔄 Loading uploaded model from: {model_path}")
-        new_model = create_vixnet(pretrained=False, num_classes=Config.NUM_CLASSES)
-        new_model = new_model.to(Config.DEVICE)
         
-        checkpoint = torch.load(model_path, map_location=Config.DEVICE, weights_only=False)
-        new_model.load_state_dict(checkpoint['model_state_dict'])
-        new_model.eval()
+        new_model, new_model_info = load_model_from_checkpoint(
+            model_path, 
+            device=Config.DEVICE
+        )
         
-        # Calculate AUC on test set
-        auc_results, error = calculate_auc_on_test_set(new_model)
+        # Calculate AUC on selected test set
+        auc_results, error = calculate_auc_on_test_set(new_model, dataset_key=dataset_key)
         
         if error:
             return jsonify({
                 'warning': 'Model loaded but AUC calculation failed',
                 'error': error,
-                'model_info': {
-                    'epoch': checkpoint.get('epoch', 'Unknown'),
-                    'metrics': checkpoint.get('metrics', {})
-                }
+                'model_info': new_model_info
             }), 200
         
         # Update current model
         current_model = new_model
-        model_info = {
-            'loaded': True,
-            'checkpoint_path': model_path,
-            'metrics': checkpoint.get('metrics', {}),
-            'epoch': checkpoint.get('epoch', 'Unknown'),
-            'auc_results': auc_results,
-            'architecture': {
-                'name': 'ViXNet',
-                'xception_dim': 2048,
-                'vit_dim': 192,
-                'fusion_dim': 512,
-                'num_classes': 2
-            }
-        }
+        model_info = new_model_info
+        model_info['auc_results'] = auc_results
         
         # Convert all to serializable types
         model_info = convert_to_serializable(model_info)
@@ -315,17 +315,24 @@ def analyze_model():
         })
         
     except Exception as e:
+        print(f"❌ Error analyzing model: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/calculate-auc', methods=['POST'])
 def calculate_auc():
-    """Calculate AUC for the current model"""
+    """Calculate AUC for the current model on a selected dataset"""
     if not model_info['loaded']:
         return jsonify({'error': 'Model not loaded'}), 500
     
     try:
-        auc_results, error = calculate_auc_on_test_set(current_model)
+        # Get dataset selection from request body
+        data = request.get_json() or {}
+        dataset_key = data.get('dataset', 'default')
+        
+        auc_results, error = calculate_auc_on_test_set(current_model, dataset_key=dataset_key)
         
         if error:
             return jsonify({'error': error}), 500
@@ -341,26 +348,37 @@ def calculate_auc():
 
 if __name__ == '__main__':
     print("="*70)
-    print("🚀 Starting ViXNet Web API")
+    print("🚀 Starting Multi-Model Deepfake Detection Web API")
     print("="*70)
     
-    # Load default model
-    load_default_model()
+    print("\n📦 Supported Model Types:")
+    print("   • ViXNet (Vision Transformer + Xception)")
+    print("   • Xception Only")
+    print("   • ViT Only")
+    
+    print("\n📁 Available Datasets:")
+    datasets = Config.list_available_datasets()
+    for ds in datasets:
+        print(f"   • {ds['name']} ({ds['key']})")
     
     print("\n" + "="*70)
     print("📡 API Endpoints:")
     print("="*70)
     print("  GET  /api/health          - Health check")
-    print("  GET  /api/model-info      - Get model information")
-    print("  POST /api/predict         - Predict image (Real/Fake)")
+    print("  GET  /api/datasets        - List available datasets")
+    print("  GET  /api/model-info      - Get current model information")
     print("  POST /api/analyze-model   - Upload and analyze model with AUC")
+    print("       Form data: model (file), dataset (string, optional)")
     print("  POST /api/calculate-auc   - Calculate AUC for current model")
+    print("       JSON body: {\"dataset\": \"default\"}")
+    print("  POST /api/predict         - Predict image (Real/Fake)")
     print("\n" + "="*70)
     print("🌐 Server running on http://localhost:5000")
     print("="*70)
     print("\n⚠️  Note: Running in development mode.")
     print("   For production, use a WSGI server like Gunicorn:")
     print("   gunicorn -w 4 -b 0.0.0.0:5000 app:app")
+    print("\n💡 Tip: No model is loaded by default. Upload a model to begin.")
     print("")
     
     # Run in development mode - for production use gunicorn or similar

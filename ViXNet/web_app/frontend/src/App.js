@@ -14,12 +14,13 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check API health and load model info on mount
+    // Check API health on mount (but don't load model)
     const initializeApp = async () => {
       try {
         const health = await checkHealth();
         setIsHealthy(health.status === 'healthy');
         
+        // Check if a model is already loaded (from previous session)
         if (health.model_loaded) {
           const info = await getModelInfo();
           setModelInfo(info);
@@ -37,7 +38,7 @@ function App() {
 
   const handleModelAnalyzed = (result) => {
     setAnalysisResult(result);
-    if (result.model_info) {
+    if (result && result.model_info) {
       setModelInfo(result.model_info);
     }
   };
@@ -47,7 +48,7 @@ function App() {
       <div className="App">
         <div className="loading">
           <div className="spinner"></div>
-          <p>Loading ViXNet...</p>
+          <p>Loading Application...</p>
         </div>
       </div>
     );
@@ -68,40 +69,44 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>🧠 ViXNet Model Visualization</h1>
-        <p className="subtitle">Vision Transformer + Xception Network for Deepfake Detection</p>
+        <h1>🧠 Multi-Model Deepfake Detection</h1>
+        <p className="subtitle">Support for ViXNet, Xception Only, and ViT Only models</p>
       </header>
 
       <div className="container">
         {/* Model Architecture Section */}
-        <section className="section">
-          <h2>📊 Model Architecture</h2>
-          <ModelArchitecture modelInfo={modelInfo} />
-        </section>
+        {modelInfo && modelInfo.loaded && (
+          <section className="section">
+            <h2>📊 Current Model Architecture</h2>
+            <ModelArchitecture modelInfo={modelInfo} />
+          </section>
+        )}
 
         {/* Drag and Drop Sections */}
         <div className="dropzone-container">
-          {/* Image Upload Section */}
-          <section className="section">
-            <h2>🖼️ Image Inference</h2>
-            <p className="section-description">
-              Drag and drop an image to detect if it's real or fake
-            </p>
-            <ImageDropzone 
-              onPredictionComplete={setPredictionResult}
-            />
-          </section>
-
           {/* Model Upload Section */}
           <section className="section">
-            <h2>🔧 Model Analysis</h2>
+            <h2>🔧 Model Upload & Analysis</h2>
             <p className="section-description">
-              Drag and drop a model file (.pth) to analyze and calculate AUC
+              Drag and drop a model file (.pth) and select a dataset to analyze
             </p>
             <ModelDropzone 
               onAnalysisComplete={handleModelAnalyzed}
             />
           </section>
+
+          {/* Image Upload Section - Only show if model is loaded */}
+          {modelInfo && modelInfo.loaded && (
+            <section className="section">
+              <h2>🖼️ Image Inference</h2>
+              <p className="section-description">
+                Drag and drop an image to detect if it's real or fake
+              </p>
+              <ImageDropzone 
+                onPredictionComplete={setPredictionResult}
+              />
+            </section>
+          )}
         </div>
 
         {/* Results Section */}
@@ -114,10 +119,24 @@ function App() {
             />
           </section>
         )}
+
+        {/* Instructions when no model loaded */}
+        {(!modelInfo || !modelInfo.loaded) && (
+          <section className="section info-section">
+            <h3>👋 Welcome!</h3>
+            <p>To get started:</p>
+            <ol>
+              <li>Upload a trained model file (.pth or .pt)</li>
+              <li>Select a dataset for evaluation</li>
+              <li>Wait for the model analysis to complete</li>
+              <li>Once loaded, you can upload images for deepfake detection</li>
+            </ol>
+          </section>
+        )}
       </div>
 
       <footer className="App-footer">
-        <p>ViXNet - Expert Systems with Applications (Q1 Journal)</p>
+        <p>Multi-Model Deepfake Detection System</p>
       </footer>
     </div>
   );
