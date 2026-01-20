@@ -259,7 +259,7 @@ class ViXNet(nn.Module):
         xception_modules = list(self.xception_branch.xception.named_children())
         
         # Typically unfreeze the last 15 layers for fine-tuning
-        num_to_unfreeze = 15
+        num_to_unfreeze = 20
         
         for name, module in xception_modules[-num_to_unfreeze:]:
             for param in module.parameters():
@@ -268,8 +268,8 @@ class ViXNet(nn.Module):
         # Unfreeze last transformer blocks of ViT
         if hasattr(self.vit_branch.vit, 'blocks'):
             vit_blocks = self.vit_branch.vit.blocks
-            # Unfreeze last 3 blocks
-            num_blocks_to_unfreeze = min(3, len(vit_blocks))
+            # Unfreeze last 4 blocks
+            num_blocks_to_unfreeze = min(4, len(vit_blocks))
             for block in vit_blocks[-num_blocks_to_unfreeze:]:
                 for param in block.parameters():
                     param.requires_grad = True

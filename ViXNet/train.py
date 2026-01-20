@@ -581,6 +581,55 @@ if __name__ == "__main__":
             train_model(model_name="vixnet")
     except KeyboardInterrupt:
         print("\n\n⚠️  Training interrupted by user!")
+        print("\n" + "="*70)
+        print("🏁 FINAL EVALUATION")
+        print("="*70)
+        stage1_config = Config.get_stage_config(1, "Stage 1: Classifier Training")
+        data_loaders = create_data_loaders(
+            batch_size=stage1_config['batch_size']
+        )
+        
+        if data_loaders is None:
+            print("❌ Failed to create data loaders!")
+        
+        train_loader = data_loaders['train']
+        val_loader = data_loaders['val']
+        test_loader = data_loaders['test']
+        
+        # Load best overall model
+        if (user_input == '2'):
+            model = create_xception_only(pretrained=True, num_classes=Config.NUM_CLASSES)
+        elif (user_input == '3'):
+            model = create_vit_only(pretrained=True, num_classes=Config.NUM_CLASSES)
+        else:
+            model = create_vixnet(pretrained=True, num_classes=Config.NUM_CLASSES)
+        best_model_path = os.path.join(Config.SAVE_DIR, 'best_model.pth')
+        if os.path.exists(best_model_path):
+            print("\n📂 Loading best overall model...")
+            checkpoint = load_checkpoint(model, best_model_path)
+            
+            # Final test evaluation
+            print("\n🧪 Final evaluation on test set...")
+            criterion = nn.CrossEntropyLoss()
+            test_metrics = validate(model, test_loader, criterion, stage_name="Final Test")
+            
+            print("\n" + "="*70)
+            print("🏆 FINAL TEST RESULTS")
+            print("="*70)
+            print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
+            print(f"   Precision: {test_metrics['precision']:.4f}")
+            print(f"   Recall: {test_metrics['recall']:.4f}")
+            print(f"   F1-Score: {test_metrics['f1']:.4f}")
+            print(f"\n   Confusion Matrix:")
+            print(f"   {test_metrics['confusion_matrix']}")
+            print("="*70)
+        
+        print("\n" + "="*70)
+        print("✅ TRAINING COMPLETED!")
+        print("="*70)
+        print(f"💾 Models saved in: {Config.SAVE_DIR}")
+        print(f"📊 Training history saved")
+        print("="*70)
         sys.exit(0)
     except Exception as e:
         print(f"\n\n❌ Error during training: {str(e)}")

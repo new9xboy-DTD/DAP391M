@@ -90,7 +90,7 @@ class Config:
     SAVE_EVERY_EPOCH = True  # Save checkpoint after every epoch
     
     # ==================== EARLY STOPPING ====================
-    PATIENCE = 5  # Early stopping patience (epochs)
+    PATIENCE = 7  # Early stopping patience (epochs)
     MIN_DELTA = 0.001  # Minimum improvement to reset patience
     
     # ==================== TESTING ====================

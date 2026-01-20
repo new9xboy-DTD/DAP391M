@@ -140,7 +140,7 @@ def calculate_auc_on_test_set(model, dataset_key='default'):
         print(f"📊 Calculating AUC on test set (dataset: {dataset_key})...")
         
         # Load test dataset
-        test_loader = create_data_loaders(batch_size=Config.STAGE1_BATCH_SIZE, num_workers=Config.NUM_WORKERS).get('test_loader')
+        test_loader = create_data_loaders(batch_size=Config.STAGE1_BATCH_SIZE, num_workers=Config.NUM_WORKERS).get('test')
         
         if test_loader is None:
             return None, f"Test dataset '{dataset_key}' not available"
