@@ -3,3 +3,10 @@ archive/
 CNN + Transformer/Dataset/
 CNN + Transformer/FaceForensics
 CNN + Transformer/Dataset.zip
+__pycache__/
+*.pyc
+**/checkpoints*/
+Dataset/
+ViXNet/checkpoints*/
+**/node_modules/
+Celeb_V2/

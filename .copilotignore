@@ -1,0 +1,4 @@
+data/
+*.csv
+*.env
+CNN + Transformer/Dataset

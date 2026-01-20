@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "D:\Repo\DAP391M\ViXNet\web_app\backend\app.py", line 12, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
