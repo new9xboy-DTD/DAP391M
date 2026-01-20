@@ -20,6 +20,7 @@ import torchvision.transforms as transforms
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score
 import io
 import base64
+from dataset import create_data_loaders
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -139,7 +140,7 @@ def calculate_auc_on_test_set(model, dataset_key='default'):
         print(f"📊 Calculating AUC on test set (dataset: {dataset_key})...")
         
         # Load test dataset
-        test_loader = create_test_loader(dataset_key=dataset_key, batch_size=32, num_workers=2)
+        test_loader = create_data_loaders(batch_size=Config.STAGE1_BATCH_SIZE, num_workers=Config.NUM_WORKERS).get('test_loader')
         
         if test_loader is None:
             return None, f"Test dataset '{dataset_key}' not available"
@@ -286,10 +287,19 @@ def analyze_model():
         # Load the model using model factory
         print(f"🔄 Loading uploaded model from: {model_path}")
         
-        new_model, new_model_info = load_model_from_checkpoint(
-            model_path, 
-            device=Config.DEVICE
-        )
+        try:
+            new_model, new_model_info = load_model_from_checkpoint(
+                model_path, 
+                device=Config.DEVICE,
+                strict=False
+            )
+        except Exception as load_error:
+            error_msg = f"Failed to load model: {str(load_error)}"
+            print(f"❌ {error_msg}")
+            return jsonify({
+                'error': error_msg,
+                'details': str(load_error)[:500]
+            }), 400
         
         # Calculate AUC on selected test set
         auc_results, error = calculate_auc_on_test_set(new_model, dataset_key=dataset_key)
@@ -357,8 +367,8 @@ if __name__ == '__main__':
     print("   • ViT Only")
     
     print("\n📁 Available Datasets:")
-    datasets = Config.list_available_datasets()
-    for ds in datasets:
+    available_datasets = Config.list_available_datasets()
+    for ds in available_datasets:
         print(f"   • {ds['name']} ({ds['key']})")
     
     print("\n" + "="*70)
