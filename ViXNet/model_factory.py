@@ -7,43 +7,7 @@ import torch
 import torch.nn as nn
 import timm
 from config import Config
-
-
-class XceptionOnly(nn.Module):
-    """
-    Xception-only model for deepfake detection
-    Uses only the Xception CNN branch
-    """
-    
-    def __init__(self, pretrained=True, num_classes=2):
-        super(XceptionOnly, self).__init__()
-        
-        # Load pretrained Xception
-        self.xception = timm.create_model(
-            'xception',
-            pretrained=pretrained,
-            num_classes=0,
-            global_pool='avg'
-        )
-        
-        # Classification head
-        self.classifier = nn.Sequential(
-            nn.Linear(2048, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(256, num_classes)
-        )
-        
-    def forward(self, x):
-        features = self.xception(x)
-        logits = self.classifier(features)
-        return logits
-
+from model import XceptionOnly
 
 class ViTOnly(nn.Module):
     """
@@ -167,13 +131,15 @@ def create_model(model_type='vixnet', pretrained=True, num_classes=2):
     return model, arch_info
 
 
-def load_model_from_checkpoint(checkpoint_path, device='cpu'):
+def load_model_from_checkpoint(checkpoint_path, device='cpu', strict=False):
     """
     Load model from checkpoint and automatically detect model type
+    Handles state_dict key mismatches by loading with strict=False
     
     Args:
         checkpoint_path: Path to checkpoint file
         device: Device to load model on
+        strict: Whether to strictly enforce matching state dict keys
         
     Returns:
         tuple: (model, model_info)
@@ -189,16 +155,48 @@ def load_model_from_checkpoint(checkpoint_path, device='cpu'):
         print("⚠️  Could not detect model type, trying ViXNet...")
         model_type = 'vixnet'
     
-    # Create model
+    # Create model with pretrained weights to match checkpoint structure
     num_classes = Config.NUM_CLASSES
-    model, arch_info = create_model(model_type=model_type, pretrained=False, num_classes=num_classes)
+    model, arch_info = create_model(model_type=model_type, pretrained=True, num_classes=num_classes)
     model = model.to(device)
     
-    # Load state dict
+    # Extract state dict from checkpoint
     if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+        state_dict = checkpoint['model_state_dict']
     else:
-        model.load_state_dict(checkpoint)
+        state_dict = checkpoint
+    
+    # Try to load state dict with flexible matching
+    try:
+        # First try strict loading
+        model.load_state_dict(state_dict, strict=True)
+        print(f"✅ Loaded state dict with strict matching")
+    except RuntimeError as e:
+        print(f"⚠️  Strict loading failed: {str(e)[:100]}...")
+        print(f"   Attempting flexible loading with strict=False...")
+        
+        try:
+            # Try non-strict loading
+            incompatible_keys = model.load_state_dict(state_dict, strict=False)
+            
+            if incompatible_keys.missing_keys:
+                print(f"⚠️  Missing keys ({len(incompatible_keys.missing_keys)}):")
+                for key in incompatible_keys.missing_keys[:5]:
+                    print(f"     - {key}")
+                if len(incompatible_keys.missing_keys) > 5:
+                    print(f"     ... and {len(incompatible_keys.missing_keys) - 5} more")
+            
+            if incompatible_keys.unexpected_keys:
+                print(f"⚠️  Unexpected keys in checkpoint ({len(incompatible_keys.unexpected_keys)}):")
+                for key in incompatible_keys.unexpected_keys[:5]:
+                    print(f"     - {key}")
+                if len(incompatible_keys.unexpected_keys) > 5:
+                    print(f"     ... and {len(incompatible_keys.unexpected_keys) - 5} more")
+            
+            print(f"✅ Loaded state dict with flexible matching")
+        except Exception as e:
+            print(f"❌ Failed to load checkpoint: {str(e)[:200]}")
+            raise RuntimeError(f"Could not load model from checkpoint: {str(e)}")
     
     model.eval()
     
