@@ -22,7 +22,7 @@ class XceptionBranch(nn.Module):
     Uses pretrained Xception from ImageNet
     """
     
-    def __init__(self, pretrained=True, feature_dim=2048):
+    def __init__(self, pretrained=True, feature_dim=2048, num_classes=0):
         super(XceptionBranch, self).__init__()
         
         # Load pretrained Xception from timm
@@ -30,7 +30,7 @@ class XceptionBranch(nn.Module):
         self.xception = timm.create_model(
             'xception',
             pretrained=pretrained,
-            num_classes=0,  # Remove classification head
+            num_classes=num_classes,  # Remove classification head
             global_pool='avg'  # Global average pooling
         )
         
@@ -284,7 +284,97 @@ class ViXNet(nn.Module):
             List of trainable parameters
         """
         return [p for p in self.parameters() if p.requires_grad]
+    
+class XceptionOnly(nn.Module):
+    """
+    Xception-only model for ablation studies
+    """
+    
+    def __init__(self, pretrained=True, num_classes=2):
+        super(XceptionOnly, self).__init__()
+        
+        print("🏗️  Initializing Xception-only model...")
+        
+        # Xception branch
+        self.xception_branch = XceptionBranch(
+            pretrained=pretrained,
+            feature_dim=Config.XCEPTION_DIM
+        )
+        
+        # Classification head
+        self.classifier = ClassificationHead(
+            fusion_dim=Config.XCEPTION_DIM,
+            num_classes=num_classes
+        )
+        
+        print(f"✅ Xception-only model initialized successfully!")
+        print(f"   Total parameters: {sum(p.numel() for p in self.parameters()):,}")
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
 
+    def forward(self, x):
+        """
+        Forward pass through XceptionOnly
+        
+        :param x: Input Images (batch_size, 3, H, W)
+        :return logits: Classification logits (batch size, num_classes)
+        """
+        #Extract features from Xception
+        xception_features = self.xception_branch(x)
+        
+        #Classify
+        logits = self.classifier(xception_features)
+        
+        return logits
+    
+    def freeze_feature_extractors(self):
+        """
+        Freeze Xception for stage 1 training
+        Only classification head remain trainable
+        """
+        print("Freezing feature extractors (Stage 1)...")
+        
+        #Freezing Xception
+        for param in self.xception_branch.parameters():
+            param.requires_grad = False
+    
+    def unfreeze_last_layers(self, num_layers_to_unfreeze=30):
+        """
+        Unfreeze Xception for stage 2 training
+        
+        Args:
+            num_layers_to_unfreeze: Number of last layers to unfreeze (default: 30)
+        """
+        layers = list(self.xception_branch.children())
+        
+        for layer in layers[-num_layers_to_unfreeze:]:
+            for p in layer.parameters():
+                p.requires_grad = True
+                
+    def get_trainable_params(self):
+        """
+        Get list of trainable parameters for optimizer
+        
+        Returns:
+            List of trainable parameters
+        """
+        return [p for p in self.parameters() if p.requires_grad]
+    
+def create_xception_only(pretrained=True, num_classes=2):
+    """
+    Factory function to create Xception model
+    
+    Args:
+        pretrained: Whether to use pretrained weights
+        num_classes: Number of output classes (default: 2)
+    
+    Returns:
+        Xception model
+    """
+    model = XceptionOnly(
+        pretrained=pretrained,
+        num_classes=num_classes
+    )
+    return model
 
 def create_vixnet(pretrained=True, num_classes=2):
     """

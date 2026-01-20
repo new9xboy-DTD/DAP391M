@@ -9,3 +9,4 @@ __pycache__/
 Dataset/
 ViXNet/checkpoints*/
 **/node_modules/
+Celeb_V2/

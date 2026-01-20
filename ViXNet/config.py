@@ -136,13 +136,13 @@ class Config:
         print("="*70)
     
     @classmethod
-    def get_stage_config(cls, stage=1):
+    def get_stage_config(cls, stage=1, name=None):
         """
         Get configuration for specific training stage
         
         Args:
             stage: 1 or 2
-            
+            name: name of stage
         Returns:
             Dictionary with stage-specific config
         """
@@ -152,7 +152,7 @@ class Config:
                 'batch_size': cls.STAGE1_BATCH_SIZE,
                 'lr': cls.STAGE1_LR,
                 'weight_decay': cls.STAGE1_WEIGHT_DECAY,
-                'name': 'Stage 1: Fusion Training'
+                'name': name or 'Stage 1: Fusion Training'
             }
         elif stage == 2:
             return {
@@ -160,7 +160,7 @@ class Config:
                 'batch_size': cls.STAGE2_BATCH_SIZE,
                 'lr': cls.STAGE2_LR,
                 'weight_decay': cls.STAGE2_WEIGHT_DECAY,
-                'name': 'Stage 2: Fine-tuning'
+                'name': name or 'Stage 2: Fine-tuning'
             }
         else:
             raise ValueError(f"Invalid stage: {stage}. Must be 1 or 2.")
