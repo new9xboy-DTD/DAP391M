@@ -1,5 +1,35 @@
 # DAP391M
 
+## 🆕 Recent Update: Multi-Model Web Application
+
+**New Features (2026-01-20):**
+- ✅ Support for multiple model architectures (ViXNet, Xception Only, ViT Only)
+- ✅ Dataset selection for model evaluation  
+- ✅ No default model loading (memory efficient)
+- ✅ Automatic model type detection
+- ✅ Improved user interface
+
+**See:** [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) for complete details
+
+### Quick Start (Multi-Model Web App)
+
+```bash
+# Backend
+cd ViXNet/web_app/backend
+python app.py
+
+# Frontend (new terminal)
+cd ViXNet/web_app/frontend
+npm install && npm start
+```
+
+**Documentation:**
+- [USER_GUIDE.md](USER_GUIDE.md) - English guide
+- [HUONG_DAN_TIENG_VIET.md](HUONG_DAN_TIENG_VIET.md) - Vietnamese guide
+- [MULTI_MODEL_IMPLEMENTATION.md](MULTI_MODEL_IMPLEMENTATION.md) - Technical details
+
+---
+
 ## Dataset
 
 - Kaggle: [https://www.kaggle.com/datasets/manjilkarki/deepfake-and-real-images/data](https://www.kaggle.com/datasets/manjilkarki/deepfake-and-real-images/data)
@@ -11,7 +41,7 @@
 
 This repository contains multiple deepfake detection implementations:
 
-### 1. ViXNet (Recommended)
+### 1. ViXNet (Recommended) 🆕 Multi-Model Support
 
 Vision Transformer with Xception Network - State-of-the-art deepfake detection with web interface.
 
@@ -19,6 +49,8 @@ Vision Transformer with Xception Network - State-of-the-art deepfake detection w
 
 **Features:**
 
+- 🆕 Multiple model architectures (ViXNet, Xception, ViT)
+- 🆕 Dataset selection for evaluation
 - 2-branch fusion architecture (Xception + ViT)
 - 2-stage training strategy
 - Web application for model visualization and inference
@@ -80,6 +112,14 @@ This project has been updated to address critical PyTorch vulnerabilities:
 
 ## Documentation
 
+### New Multi-Model Documentation
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Overview of latest changes
+- **[USER_GUIDE.md](USER_GUIDE.md)** - English user guide
+- **[HUONG_DAN_TIENG_VIET.md](HUONG_DAN_TIENG_VIET.md)** - Vietnamese user guide
+- **[MULTI_MODEL_IMPLEMENTATION.md](MULTI_MODEL_IMPLEMENTATION.md)** - Technical details
+- **[ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)** - System architecture
+
+### Existing Documentation
 - **ViXNet Documentation:** [ViXNet/README.md](ViXNet/README.md)
 - **Web App Guide:** [ViXNet/web_app/README.md](ViXNet/web_app/README.md)
 - **Quick Start:** [ViXNet/web_app/QUICKSTART.md](ViXNet/web_app/QUICKSTART.md)
