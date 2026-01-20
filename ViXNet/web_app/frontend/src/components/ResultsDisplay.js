@@ -173,7 +173,7 @@ const ResultsDisplay = ({ predictionResult, analysisResult }) => {
                           tpr: analysisResult.model_info.auc_results.roc_curve.tpr[i]
                         }))}
                         dataKey="tpr" 
-                        stroke="#667eea" 
+                        stroke="#0ea5e9" 
                         strokeWidth={3}
                         dot={false}
                         name="ROC Curve"

@@ -102,10 +102,10 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
           border-3 border-dashed rounded-2xl p-10 text-center cursor-pointer 
           transition-all duration-300 min-h-[300px] flex items-center justify-center
           ${dragActive 
-            ? 'border-secondary-500 bg-purple-100 scale-[1.02]' 
+            ? 'border-secondary-500 bg-secondary-100 scale-[1.02]' 
             : analyzing 
-              ? 'border-primary-500 bg-blue-50' 
-              : 'border-gray-300 bg-gray-50 hover:border-secondary-500 hover:bg-purple-50'
+              ? 'border-primary-500 bg-primary-50' 
+              : 'border-gray-300 bg-gray-50 hover:border-secondary-500 hover:bg-secondary-50'
           }
         `}
         onDragEnter={handleDrag}

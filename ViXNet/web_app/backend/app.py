@@ -301,20 +301,21 @@ def analyze_model():
                 'details': str(load_error)[:500]
             }), 400
         
-        # Calculate AUC on selected test set
-        auc_results, error = calculate_auc_on_test_set(new_model, dataset_key=dataset_key)
-        
-        if error:
-            return jsonify({
-                'warning': 'Model loaded but AUC calculation failed',
-                'error': error,
-                'model_info': new_model_info
-            }), 200
-        
-        # Update current model
+        # Update current model FIRST (before AUC calculation)
+        # This ensures the model is available for prediction even if AUC fails
         current_model = new_model
         model_info = new_model_info
-        model_info['auc_results'] = auc_results
+        
+        # Calculate AUC on selected test set
+        auc_results, error = calculate_auc_on_test_set(current_model, dataset_key=dataset_key)
+        
+        if error:
+            # Model is still loaded, just without AUC metrics
+            print(f"⚠️  Warning: {error}")
+            model_info['auc_error'] = error
+        else:
+            # Add AUC results to model info
+            model_info['auc_results'] = auc_results
         
         # Convert all to serializable types
         model_info = convert_to_serializable(model_info)
