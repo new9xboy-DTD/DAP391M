@@ -3,46 +3,12 @@ Model factory for creating different deepfake detection models
 Supports: ViXNet, Xception Only, ViT Only
 """
 
+from venv import create
 import torch
 import torch.nn as nn
 import timm
 from config import Config
-from model import XceptionOnly
-
-class ViTOnly(nn.Module):
-    """
-    ViT-only model for deepfake detection
-    Uses only the Vision Transformer branch
-    """
-    
-    def __init__(self, pretrained=True, num_classes=2, model_name='vit_base_patch16_224'):
-        super(ViTOnly, self).__init__()
-        
-        # Load pretrained ViT
-        self.vit = timm.create_model(
-            model_name,
-            pretrained=pretrained,
-            num_classes=0,
-            global_pool='token'
-        )
-        
-        # Classification head
-        self.classifier = nn.Sequential(
-            nn.Linear(768, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(256, num_classes)
-        )
-        
-    def forward(self, x):
-        features = self.vit(x)
-        logits = self.classifier(features)
-        return logits
+from model import create_vit_only, create_xception_only, create_vixnet
 
 
 def detect_model_type(checkpoint):
@@ -96,7 +62,6 @@ def create_model(model_type='vixnet', pretrained=True, num_classes=2):
     model_type = model_type.lower()
     
     if model_type == 'vixnet':
-        from model import create_vixnet
         model = create_vixnet(pretrained=pretrained, num_classes=num_classes)
         arch_info = {
             'name': 'ViXNet',
@@ -107,7 +72,7 @@ def create_model(model_type='vixnet', pretrained=True, num_classes=2):
             'num_classes': num_classes
         }
     elif model_type == 'xception':
-        model = XceptionOnly(pretrained=pretrained, num_classes=num_classes)
+        model = create_xception_only(pretrained=pretrained, num_classes=num_classes)
         arch_info = {
             'name': 'Xception Only',
             'description': 'Xception CNN for spatial features',
@@ -115,7 +80,7 @@ def create_model(model_type='vixnet', pretrained=True, num_classes=2):
             'num_classes': num_classes
         }
     elif model_type == 'vit':
-        model = ViTOnly(pretrained=pretrained, num_classes=num_classes)
+        model = create_vit_only(pretrained=pretrained, num_classes=num_classes)
         arch_info = {
             'name': 'ViT Only',
             'description': 'Vision Transformer for patch-wise attention',

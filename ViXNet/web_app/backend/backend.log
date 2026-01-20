@@ -1,4 +1,7 @@
+======================================================================
 Traceback (most recent call last):
-  File "D:\Repo\DAP391M\ViXNet\web_app\backend\app.py", line 12, in <module>
-    import torch
-ModuleNotFoundError: No module named 'torch'
+  File "D:\Repo\DAP391M\ViXNet\web_app\backend\app.py", line 361, in <module>
+    print("\U0001f680 Starting Multi-Model Deepfake Detection Web API")
+  File "C:\Users\Duong\AppData\Local\Programs\Python\Python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
