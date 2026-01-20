@@ -20,12 +20,12 @@ import torchvision.transforms as transforms
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score
 import io
 import base64
-from dataset import create_data_loaders
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-from model_factory import create_model, load_model_from_checkpoint, detect_model_type
-from config import Config
+from ViXNet.model import create_data_loaders
+from ViXNet.model_factory import create_model, load_model_from_checkpoint, detect_model_type
+from ViXNet.config import Config
 from torchvision import datasets
 
 app = Flask(__name__)
