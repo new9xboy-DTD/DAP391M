@@ -27,6 +27,13 @@ class Config:
             'val': os.path.join("D:/Repo/DAP391M", "Dataset", "Validation"),
             'test': os.path.join("D:/Repo/DAP391M", "Dataset", "Test")
         },
+        'celeb': {
+            'name': 'CelebDF (V2)',
+            'path': os.path.join("D:/Repo/DAP391M", "Celeb_V2"),
+            'train': os.path.join("D:/Repo/DAP391M", "Celeb_V2", "Train"),
+            'val': os.path.join("D:/Repo/DAP391M", "Celeb_V2", "Validation"),
+            'test': os.path.join("D:/Repo/DAP391M", "Celeb_V2", "Test")
+        },
         # Add more datasets here in the future
         # 'dataset2': {
         #     'name': 'Another Dataset',

@@ -125,7 +125,7 @@ def create_test_loader(dataset_key='default', batch_size=32, num_workers=2):
         return None
 
 
-def calculate_auc_on_test_set(model, dataset_key='default'):
+def calculate_auc_on_test_set(model, dataset_key='default', device=Config.DEVICE):
     """
     Calculate AUC on the test dataset
     
@@ -152,8 +152,8 @@ def calculate_auc_on_test_set(model, dataset_key='default'):
         
         with torch.no_grad():
             for images, labels in test_loader:
-                images = images.to(Config.DEVICE)
-                labels = labels.to(Config.DEVICE)
+                images = images.to(device)
+                labels = labels.to(device)
                 
                 outputs = model(images)
                 probs = torch.softmax(outputs, dim=1)

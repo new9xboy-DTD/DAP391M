@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import timm
 from config import Config
-from model import create_vit_only, create_xception_only, create_vixnet
+from model import create_vit_only, create_vixnet_cross_attention, create_xception_only, create_vixnet
 
 
 def detect_model_type(checkpoint):
@@ -30,8 +30,11 @@ def detect_model_type(checkpoint):
     has_xception_branch = any('xception_branch' in key for key in state_dict.keys())
     has_vit_branch = any('vit_branch' in key for key in state_dict.keys())
     has_fusion = any('fusion' in key for key in state_dict.keys())
-    
-    if has_xception_branch and has_vit_branch and has_fusion:
+    has_cross_attention = any('fusion.x_proj' in key for key in state_dict.keys())
+
+    if has_cross_attention and has_xception_branch and has_vit_branch and has_fusion:
+        return 'vixnet_cross_attention'
+    elif has_xception_branch and has_vit_branch and has_fusion:
         return 'vixnet'
     elif has_xception_branch or any('xception' in key for key in state_dict.keys()):
         return 'xception'
@@ -61,7 +64,17 @@ def create_model(model_type='vixnet', pretrained=True, num_classes=2):
     """
     model_type = model_type.lower()
     
-    if model_type == 'vixnet':
+    if model_type == 'vixnet_cross_attention':
+        model = create_vixnet_cross_attention(pretrained=pretrained, num_classes=num_classes)
+        arch_info = {
+            'name': 'ViXNet Cross-Attention',
+            'description': 'Vision Transformer + Xception Network with Cross-Attention Fusion',
+            'xception_dim': Config.XCEPTION_DIM,
+            'vit_dim': Config.VIT_DIM,
+            'fusion_dim': Config.FUSION_DIM,
+            'num_classes': num_classes
+        }
+    elif model_type == 'vixnet':
         model = create_vixnet(pretrained=pretrained, num_classes=num_classes)
         arch_info = {
             'name': 'ViXNet',

@@ -77,6 +77,75 @@ class ViTBranch(nn.Module):
         return features
 
 
+class XceptionTokenBranch(nn.Module):
+    """
+    Xception branch that returns spatial tokens for cross-attention fusion
+    """
+
+    def __init__(self, pretrained=True, feature_dim=2048):
+        super(XceptionTokenBranch, self).__init__()
+
+        self.xception = timm.create_model(
+            'xception',
+            pretrained=pretrained,
+            num_classes=0,
+            global_pool=''  # Keep spatial map for tokens
+        )
+
+        self.feature_dim = feature_dim
+
+    def forward(self, x):
+        """
+        Args:
+            x: Input images (batch_size, 3, H, W)
+        Returns:
+            tokens: Spatial tokens (batch_size, num_tokens, feature_dim)
+        """
+        features = self.xception.forward_features(x)
+        if features.dim() == 4:
+            # (B, C, H, W) -> (B, H*W, C)
+            tokens = features.flatten(2).transpose(1, 2)
+        elif features.dim() == 3:
+            tokens = features
+        else:
+            tokens = features.unsqueeze(1)
+        return tokens
+
+
+class ViTTokenBranch(nn.Module):
+    """
+    ViT branch that returns token sequence for cross-attention fusion
+    """
+
+    def __init__(self, pretrained=True, feature_dim=Config.VIT_DIM, model_name=Config.VIT_MODEL_NAME):
+        super(ViTTokenBranch, self).__init__()
+
+        self.vit = timm.create_model(
+            model_name,
+            pretrained=pretrained,
+            num_classes=0,
+            global_pool=''  # Keep full token sequence
+        )
+
+        self.feature_dim = feature_dim
+
+    def forward(self, x):
+        """
+        Args:
+            x: Input images (batch_size, 3, H, W)
+        Returns:
+            tokens: Token sequence (batch_size, num_tokens, feature_dim)
+        """
+        features = self.vit.forward_features(x)
+        if features.dim() == 3:
+            tokens = features
+        elif features.dim() == 2:
+            tokens = features.unsqueeze(1)
+        else:
+            tokens = features
+        return tokens
+
+
 class FeatureFusion(nn.Module):
     """
     Feature fusion module to combine Xception and ViT features
@@ -115,6 +184,78 @@ class FeatureFusion(nn.Module):
         # Apply fusion layers
         fused_features = self.fusion(concat_features)
         
+        return fused_features
+
+
+class CrossAttentionFusion(nn.Module):
+    """
+    Cross-attention fusion between Xception spatial tokens and ViT tokens
+    """
+
+    def __init__(
+        self,
+        xception_dim=Config.XCEPTION_DIM,
+        vit_dim=Config.VIT_DIM,
+        fusion_dim=Config.FUSION_DIM,
+        num_heads=8,
+        dropout=0.1
+    ):
+        super(CrossAttentionFusion, self).__init__()
+
+        self.x_proj = nn.Linear(xception_dim, fusion_dim) #tên này để xác định là cross attention, không thay đổi
+        self.v_proj = nn.Linear(vit_dim, fusion_dim)
+
+        self.pre_norm_x = nn.LayerNorm(fusion_dim)
+        self.pre_norm_v = nn.LayerNorm(fusion_dim)
+
+        self.attn_x_to_v = nn.MultiheadAttention(
+            embed_dim=fusion_dim,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.attn_v_to_x = nn.MultiheadAttention(
+            embed_dim=fusion_dim,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True
+        )
+
+        self.norm_x = nn.LayerNorm(fusion_dim)
+        self.norm_v = nn.LayerNorm(fusion_dim)
+
+        self.fusion = nn.Sequential(
+            nn.Linear(fusion_dim * 2, fusion_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+            nn.Linear(fusion_dim, fusion_dim),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x_tokens, v_tokens):
+        """
+        Args:
+            x_tokens: Xception tokens (batch_size, num_x_tokens, xception_dim)
+            v_tokens: ViT tokens (batch_size, num_v_tokens, vit_dim)
+        Returns:
+            fused_features: Fused features (batch_size, fusion_dim)
+        """
+        x = self.pre_norm_x(self.x_proj(x_tokens))
+        v = self.pre_norm_v(self.v_proj(v_tokens))
+
+        # Compute attention in fp32 for stability under AMP
+        with torch.amp.autocast(device_type=x.device.type, enabled=False):
+            x_attn, _ = self.attn_x_to_v(query=x.float(), key=v.float(), value=v.float())
+            v_attn, _ = self.attn_v_to_x(query=v.float(), key=x.float(), value=x.float())
+
+        x = self.norm_x(x + x_attn.to(x.dtype))
+        v = self.norm_v(v + v_attn.to(v.dtype))
+
+        x_pooled = x.mean(dim=1)
+        v_pooled = v.mean(dim=1)
+        fused = torch.cat([x_pooled, v_pooled], dim=1)
+
+        fused_features = self.fusion(fused)
         return fused_features
 
 
@@ -280,6 +421,122 @@ class ViXNet(nn.Module):
         """
         Get list of trainable parameters for optimizer
         
+        Returns:
+            List of trainable parameters
+        """
+        return [p for p in self.parameters() if p.requires_grad]
+
+
+class ViXNetCrossAttention(nn.Module):
+    """
+    ViXNet variant using cross-attention fusion between Xception and ViT tokens
+    """
+
+    def __init__(
+        self,
+        pretrained=True,
+        xception_dim=Config.XCEPTION_DIM,
+        vit_dim=Config.VIT_DIM,
+        fusion_dim=Config.FUSION_DIM,
+        num_classes=2,
+        vit_model_name=Config.VIT_MODEL_NAME,
+        num_heads=8,
+        dropout=0.1
+    ):
+        super(ViXNetCrossAttention, self).__init__()
+
+        print("🏗️  Initializing ViXNet (Cross-Attention Fusion) model...")
+
+        self.xception_branch = XceptionTokenBranch(
+            pretrained=pretrained,
+            feature_dim=xception_dim
+        )
+
+        self.vit_branch = ViTTokenBranch(
+            pretrained=pretrained,
+            feature_dim=vit_dim,
+            model_name=vit_model_name
+        )
+
+        self.fusion = CrossAttentionFusion(
+            xception_dim=xception_dim,
+            vit_dim=vit_dim,
+            fusion_dim=fusion_dim,
+            num_heads=num_heads,
+            dropout=dropout
+        )
+
+        self.classifier = ClassificationHead(
+            fusion_dim=fusion_dim,
+            num_classes=num_classes
+        )
+
+        self.xception_dim = xception_dim
+        self.vit_dim = vit_dim
+        self.fusion_dim = fusion_dim
+
+        print("✅ ViXNet Cross-Attention initialized successfully!")
+        print(f"   Total parameters: {sum(p.numel() for p in self.parameters()):,}")
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+
+    def forward(self, x):
+        """
+        Forward pass through ViXNetCrossAttention
+
+        Args:
+            x: Input images (batch_size, 3, H, W)
+        Returns:
+            logits: Classification logits (batch_size, num_classes)
+        """
+        x_tokens = self.xception_branch(x)
+        v_tokens = self.vit_branch(x)
+
+        fused_features = self.fusion(x_tokens, v_tokens)
+        logits = self.classifier(fused_features)
+        return logits
+
+    def freeze_feature_extractors(self):
+        """
+        Freeze Xception and ViT branches for Stage 1 training
+        Only fusion and classification layers remain trainable
+        """
+        print("🔒 Freezing feature extractors (Stage 1)...")
+
+        for param in self.xception_branch.parameters():
+            param.requires_grad = False
+
+        for param in self.vit_branch.parameters():
+            param.requires_grad = False
+
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+
+    def unfreeze_high_level_layers(self):
+        """
+        Unfreeze high-level layers for Stage 2 fine-tuning
+        - Xception: last 15 layers
+        - ViT: last 3 transformer encoder blocks
+        """
+        print("🔓 Unfreezing high-level layers (Stage 2)...")
+
+        xception_modules = list(self.xception_branch.xception.named_children())
+        num_to_unfreeze = 15
+        for name, module in xception_modules[-num_to_unfreeze:]:
+            for param in module.parameters():
+                param.requires_grad = True
+
+        if hasattr(self.vit_branch.vit, 'blocks'):
+            vit_blocks = self.vit_branch.vit.blocks
+            num_blocks_to_unfreeze = min(3, len(vit_blocks))
+            for block in vit_blocks[-num_blocks_to_unfreeze:]:
+                for param in block.parameters():
+                    param.requires_grad = True
+
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+
+    def get_trainable_params(self):
+        """
+        Get list of trainable parameters for optimizer
+
         Returns:
             List of trainable parameters
         """
@@ -497,6 +754,37 @@ def create_vixnet(pretrained=True, num_classes=2):
         fusion_dim=Config.FUSION_DIM,
         num_classes=num_classes,
         vit_model_name=Config.VIT_MODEL_NAME
+    )
+    return model
+
+
+def create_vixnet_cross_attention(
+    pretrained=True,
+    num_classes=2,
+    num_heads=8,
+    dropout=0.1
+):
+    """
+    Factory function to create ViXNet with cross-attention fusion
+
+    Args:
+        pretrained: Whether to use pretrained weights
+        num_classes: Number of output classes (default: 2 for binary classification)
+        num_heads: Number of attention heads
+        dropout: Dropout rate inside cross-attention fusion
+
+    Returns:
+        ViXNetCrossAttention model
+    """
+    model = ViXNetCrossAttention(
+        pretrained=pretrained,
+        xception_dim=Config.XCEPTION_DIM,
+        vit_dim=Config.VIT_DIM,
+        fusion_dim=Config.FUSION_DIM,
+        num_classes=num_classes,
+        vit_model_name=Config.VIT_MODEL_NAME,
+        num_heads=num_heads,
+        dropout=dropout
     )
     return model
 

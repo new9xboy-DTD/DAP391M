@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from model import create_vit_only, create_vixnet, create_xception_only
+from model import create_vit_only, create_vixnet, create_vixnet_cross_attention, create_xception_only
 from config import Config
 from dataset import create_data_loaders, check_dataset_availability
 from utils import (
@@ -468,6 +468,8 @@ def train_model(model_name="vixnet"):
         model = create_xception_only(pretrained=True, num_classes=Config.NUM_CLASSES)
     elif model_name.lower() == "vit":
         model = create_vit_only(pretrained=True, num_classes=Config.NUM_CLASSES)
+    elif model_name.lower() == "vixnet_cross_attention":
+        model = create_vixnet_cross_attention(pretrained=True, num_classes=Config.NUM_CLASSES)
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
@@ -572,64 +574,17 @@ def train_model(model_name="vixnet"):
     
 if __name__ == "__main__":
     try:
-        user_input = input("Select training mode:\n1. ViXNet (default)\n2. Xception Only\n3. ViT Only\nEnter choice (1, 2, or 3): ").strip()
+        user_input = input("Select training mode:\n1. ViXNet (default)\n2. Xception Only\n3. ViT Only\n4. ViXNet Cross-Attention\nEnter choice (1, 2, 3, or 4): ").strip()
         if(user_input == '2'):
             train_model(model_name="xception")
         elif(user_input == '3'):
             train_model(model_name="vit")
+        elif(user_input == '4'):
+            train_model(model_name="vixnet_cross_attention")
         else:
             train_model(model_name="vixnet")
     except KeyboardInterrupt:
         print("\n\n⚠️  Training interrupted by user!")
-        print("\n" + "="*70)
-        print("🏁 FINAL EVALUATION")
-        print("="*70)
-        stage1_config = Config.get_stage_config(1, "Stage 1: Classifier Training")
-        data_loaders = create_data_loaders(
-            batch_size=stage1_config['batch_size']
-        )
-        
-        if data_loaders is None:
-            print("❌ Failed to create data loaders!")
-        
-        train_loader = data_loaders['train']
-        val_loader = data_loaders['val']
-        test_loader = data_loaders['test']
-        
-        # Load best overall model
-        if (user_input == '2'):
-            model = create_xception_only(pretrained=True, num_classes=Config.NUM_CLASSES)
-        elif (user_input == '3'):
-            model = create_vit_only(pretrained=True, num_classes=Config.NUM_CLASSES)
-        else:
-            model = create_vixnet(pretrained=True, num_classes=Config.NUM_CLASSES)
-        best_model_path = os.path.join(Config.SAVE_DIR, 'best_model.pth')
-        if os.path.exists(best_model_path):
-            print("\n📂 Loading best overall model...")
-            checkpoint = load_checkpoint(model, best_model_path)
-            
-            # Final test evaluation
-            print("\n🧪 Final evaluation on test set...")
-            criterion = nn.CrossEntropyLoss()
-            test_metrics = validate(model, test_loader, criterion, stage_name="Final Test")
-            
-            print("\n" + "="*70)
-            print("🏆 FINAL TEST RESULTS")
-            print("="*70)
-            print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
-            print(f"   Precision: {test_metrics['precision']:.4f}")
-            print(f"   Recall: {test_metrics['recall']:.4f}")
-            print(f"   F1-Score: {test_metrics['f1']:.4f}")
-            print(f"\n   Confusion Matrix:")
-            print(f"   {test_metrics['confusion_matrix']}")
-            print("="*70)
-        
-        print("\n" + "="*70)
-        print("✅ TRAINING COMPLETED!")
-        print("="*70)
-        print(f"💾 Models saved in: {Config.SAVE_DIR}")
-        print(f"📊 Training history saved")
-        print("="*70)
         sys.exit(0)
     except Exception as e:
         print(f"\n\n❌ Error during training: {str(e)}")
