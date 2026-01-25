@@ -10,3 +10,5 @@ Dataset/
 ViXNet/checkpoints*/
 **/node_modules/
 Celeb_V2/
+archive.zip
+**/model/
