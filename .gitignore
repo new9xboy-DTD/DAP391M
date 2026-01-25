@@ -12,3 +12,4 @@ ViXNet/checkpoints*/
 Celeb_V2/
 archive.zip
 **/model/
+**/build/

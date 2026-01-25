@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from model import create_vixnet, create_xception_only
+from model import create_vit_only, create_vixnet, create_vixnet_cross_attention, create_xception_only
 from config import Config
 from dataset import create_data_loaders, check_dataset_availability
 from utils import (
@@ -406,16 +406,15 @@ def train_vixnet():
     print(f"📊 Training history saved")
     print("="*70)
     
-def train_xception_only():
+def train_model(model_name="vixnet"):
     """
     Main training function implementing 2-stage training strategy
-    
-    Stage 1: Freeze all feature extractors of Xception, train classifier
-    Stage 2: Unfreeze 30 last layers, fine-tune with low LR 
+    Args:
+        model_name: Name of the model to train ("vixnet", "xception", or "vit")
     """
 
     print("\n" + "="*70)
-    print("XCEPTION ONLY TRAINING")
+    print("TRAINING")
     print("="*70)
     
     #print config
@@ -463,7 +462,17 @@ def train_xception_only():
     print("🏗️  INITIALIZING MODEL")
     print("="*70)
     
-    model = create_xception_only(pretrained=True, num_classes=Config.NUM_CLASSES)
+    if model_name.lower() == "vixnet":
+        model = create_vixnet(pretrained=True, num_classes=Config.NUM_CLASSES)
+    elif model_name.lower() == "xception":
+        model = create_xception_only(pretrained=True, num_classes=Config.NUM_CLASSES)
+    elif model_name.lower() == "vit":
+        model = create_vit_only(pretrained=True, num_classes=Config.NUM_CLASSES)
+    elif model_name.lower() == "vixnet_cross_attention":
+        model = create_vixnet_cross_attention(pretrained=True, num_classes=Config.NUM_CLASSES)
+    else:
+        raise ValueError(f"Unknown model name: {model_name}")
+
     model = model.to(Config.DEVICE)
     
     # ==================== STAGE 1: TRAIN FUSION + CLASSIFIER ====================
@@ -498,7 +507,7 @@ def train_xception_only():
     else:
         print("\n⚠️  Best Stage 1 model not found, continuing with current model...")
     
-    model.unfreeze_last_layers()
+    model.unfreeze_high_level_layers()
     
     # Create data loaders for Stage 2 (may have different batch size)
     stage2_config = Config.get_stage_config(2)
@@ -562,13 +571,18 @@ def train_xception_only():
     print(f"📊 Training history saved")
     print("="*70)
     
+    
 if __name__ == "__main__":
     try:
-        user_input = input("Select training mode:\n1. ViXNet (default)\n2. Xception Only\nEnter choice (1 or 2): ").strip()
+        user_input = input("Select training mode:\n1. ViXNet (default)\n2. Xception Only\n3. ViT Only\n4. ViXNet Cross-Attention\nEnter choice (1, 2, 3, or 4): ").strip()
         if(user_input == '2'):
-            train_xception_only()
+            train_model(model_name="xception")
+        elif(user_input == '3'):
+            train_model(model_name="vit")
+        elif(user_input == '4'):
+            train_model(model_name="vixnet_cross_attention")
         else:
-            train_vixnet()
+            train_model(model_name="vixnet")
     except KeyboardInterrupt:
         print("\n\n⚠️  Training interrupted by user!")
         sys.exit(0)

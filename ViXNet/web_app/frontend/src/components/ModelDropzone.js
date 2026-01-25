@@ -1,6 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { analyzeModel, getDatasets } from '../utils/api';
-import './ModelDropzone.css';
 
 const ModelDropzone = ({ onAnalysisComplete }) => {
   const [dragActive, setDragActive] = useState(false);
@@ -10,6 +9,7 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
   const [datasets, setDatasets] = useState([]);
   const [selectedDataset, setSelectedDataset] = useState('default');
   const [pendingFile, setPendingFile] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     // Load available datasets on mount
@@ -97,9 +97,18 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
   };
 
   return (
-    <div className="model-dropzone">
+    <div className="w-full">
       <div
-        className={`dropzone ${dragActive ? 'drag-active' : ''} ${analyzing ? 'analyzing' : ''}`}
+        className={`
+          border-3 border-dashed rounded-2xl p-10 text-center cursor-pointer 
+          transition-all duration-300 min-h-[300px] flex items-center justify-center
+          ${dragActive 
+            ? 'border-secondary-500 bg-secondary-100 scale-[1.02]' 
+            : analyzing 
+              ? 'border-primary-500 bg-primary-50' 
+              : 'border-gray-300 bg-gray-50 hover:border-secondary-500 hover:bg-secondary-50'
+          }
+        `}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -108,52 +117,55 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
         <input
           type="file"
           id="model-upload"
+          ref={fileInputRef}
           accept=".pth,.pt"
           onChange={handleChange}
-          className="file-input"
+          className="hidden"
         />
         
-        <label htmlFor="model-upload" className="upload-label">
+        <label htmlFor="model-upload" className="flex flex-col items-center cursor-pointer w-full">
           {analyzing ? (
-            <div className="analyzing-container">
-              <div className="spinner-small"></div>
-              <p className="analyzing-text">Analyzing model and calculating AUC...</p>
-              <p className="analyzing-hint">This may take a few moments</p>
+            <div className="flex flex-col items-center">
+              <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mb-4"></div>
+              <p className="text-xl text-gray-800 font-semibold mb-2">Analyzing model and calculating AUC...</p>
+              <p className="text-sm text-gray-500">This may take a few moments</p>
             </div>
           ) : fileName ? (
-            <div className="file-info">
-              <div className="file-icon">✅</div>
-              <p className="file-name">{fileName}</p>
-              <p className="file-hint">Model loaded successfully</p>
+            <div className="flex flex-col items-center">
+              <div className="text-6xl mb-5">✅</div>
+              <p className="text-xl text-gray-800 font-semibold mb-2 break-all">{fileName}</p>
+              <p className="text-sm text-green-500 font-medium">Model loaded successfully</p>
             </div>
           ) : pendingFile ? (
-            <div className="file-info">
-              <div className="file-icon">📦</div>
-              <p className="file-name">{pendingFile.name}</p>
-              <p className="file-hint">Ready to analyze - select dataset below</p>
+            <div className="flex flex-col items-center">
+              <div className="text-6xl mb-5">📦</div>
+              <p className="text-xl text-gray-800 font-semibold mb-2 break-all">{pendingFile.name}</p>
+              <p className="text-sm text-gray-500 font-medium">Ready to analyze - select dataset below</p>
             </div>
           ) : (
             <>
-              <div className="upload-icon">🔧</div>
-              <p className="upload-text">
+              <div className="text-6xl mb-5">🔧</div>
+              <p className="text-xl text-gray-800 font-medium mb-2">
                 Drag & drop a model file or click to upload
               </p>
-              <p className="upload-hint">Supports: .pth, .pt (PyTorch models)</p>
+              <p className="text-sm text-gray-400">Supports: .pth, .pt (PyTorch models)</p>
             </>
           )}
         </label>
       </div>
 
       {pendingFile && !analyzing && !fileName && datasets.length > 0 && (
-        <div className="dataset-selector">
-          <label htmlFor="dataset-select">
+        <div className="mt-5 p-5 bg-gray-50 rounded-xl border-2 border-gray-200">
+          <label htmlFor="dataset-select" className="block mb-3 text-gray-800 font-medium">
             <strong>Select Dataset for Evaluation:</strong>
           </label>
           <select 
             id="dataset-select"
             value={selectedDataset} 
             onChange={(e) => setSelectedDataset(e.target.value)}
-            className="dataset-dropdown"
+            className="w-full p-3 border-2 border-gray-300 rounded-lg text-gray-800 bg-white cursor-pointer 
+                       transition-all duration-300 hover:border-secondary-500 focus:outline-none focus:border-primary-500 
+                       focus:ring-4 focus:ring-primary-500/10 mb-4"
           >
             {datasets.map((ds) => (
               <option key={ds.key} value={ds.key}>
@@ -162,7 +174,8 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
             ))}
           </select>
           <button 
-            className="analyze-button"
+            className="w-full py-4 px-6 bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-lg font-semibold 
+                       transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary-500/40 active:translate-y-0"
             onClick={handleAnalyze}
           >
             Analyze Model
@@ -171,19 +184,24 @@ const ModelDropzone = ({ onAnalysisComplete }) => {
       )}
 
       {error && (
-        <div className="error-message">
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mt-4 border border-red-200">
           ⚠️ {error}
         </div>
       )}
 
       {fileName && !analyzing && (
         <button 
-          className="reset-button"
+          className="mt-5 px-8 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-lg font-semibold 
+                     transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary-500/40 active:translate-y-0"
           onClick={() => {
             setFileName(null);
             setPendingFile(null);
             onAnalysisComplete(null);
             setError(null);
+            // Reset the file input element to allow selecting the same file again
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+            }
           }}
         >
           Upload Another Model

@@ -27,6 +27,13 @@ class Config:
             'val': os.path.join("D:/Repo/DAP391M", "Dataset", "Validation"),
             'test': os.path.join("D:/Repo/DAP391M", "Dataset", "Test")
         },
+        'celeb': {
+            'name': 'CelebDF (V2)',
+            'path': os.path.join("D:/Repo/DAP391M", "Celeb_V2"),
+            'train': os.path.join("D:/Repo/DAP391M", "Celeb_V2", "Train"),
+            'val': os.path.join("D:/Repo/DAP391M", "Celeb_V2", "Validation"),
+            'test': os.path.join("D:/Repo/DAP391M", "Celeb_V2", "Test")
+        },
         # Add more datasets here in the future
         # 'dataset2': {
         #     'name': 'Another Dataset',
@@ -73,7 +80,7 @@ class Config:
     
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
-    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
+    LABEL_SMOOTHING = 0  # Label smoothing for CrossEntropyLoss
     
     # ==================== DATA LOADING ====================
     NUM_WORKERS = 8  # Number of workers for data loading
@@ -90,7 +97,7 @@ class Config:
     SAVE_EVERY_EPOCH = True  # Save checkpoint after every epoch
     
     # ==================== EARLY STOPPING ====================
-    PATIENCE = 5  # Early stopping patience (epochs)
+    PATIENCE = 7  # Early stopping patience (epochs)
     MIN_DELTA = 0.001  # Minimum improvement to reset patience
     
     # ==================== TESTING ====================

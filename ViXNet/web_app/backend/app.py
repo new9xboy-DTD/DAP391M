@@ -23,9 +23,9 @@ import base64
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-from ViXNet.model import create_data_loaders
-from ViXNet.model_factory import create_model, load_model_from_checkpoint, detect_model_type
-from ViXNet.config import Config
+from dataset import create_data_loaders
+from model_factory import create_model, load_model_from_checkpoint, detect_model_type
+from config import Config
 from torchvision import datasets
 
 app = Flask(__name__)
@@ -125,7 +125,7 @@ def create_test_loader(dataset_key='default', batch_size=32, num_workers=2):
         return None
 
 
-def calculate_auc_on_test_set(model, dataset_key='default'):
+def calculate_auc_on_test_set(model, dataset_key='default', device=Config.DEVICE):
     """
     Calculate AUC on the test dataset
     
@@ -140,7 +140,7 @@ def calculate_auc_on_test_set(model, dataset_key='default'):
         print(f"📊 Calculating AUC on test set (dataset: {dataset_key})...")
         
         # Load test dataset
-        test_loader = create_data_loaders(batch_size=Config.STAGE1_BATCH_SIZE, num_workers=Config.NUM_WORKERS).get('test_loader')
+        test_loader = create_data_loaders(batch_size=Config.STAGE1_BATCH_SIZE, num_workers=Config.NUM_WORKERS).get('test')
         
         if test_loader is None:
             return None, f"Test dataset '{dataset_key}' not available"
@@ -152,8 +152,8 @@ def calculate_auc_on_test_set(model, dataset_key='default'):
         
         with torch.no_grad():
             for images, labels in test_loader:
-                images = images.to(Config.DEVICE)
-                labels = labels.to(Config.DEVICE)
+                images = images.to(device)
+                labels = labels.to(device)
                 
                 outputs = model(images)
                 probs = torch.softmax(outputs, dim=1)
@@ -301,20 +301,21 @@ def analyze_model():
                 'details': str(load_error)[:500]
             }), 400
         
-        # Calculate AUC on selected test set
-        auc_results, error = calculate_auc_on_test_set(new_model, dataset_key=dataset_key)
-        
-        if error:
-            return jsonify({
-                'warning': 'Model loaded but AUC calculation failed',
-                'error': error,
-                'model_info': new_model_info
-            }), 200
-        
-        # Update current model
+        # Update current model FIRST (before AUC calculation)
+        # This ensures the model is available for prediction even if AUC fails
         current_model = new_model
         model_info = new_model_info
-        model_info['auc_results'] = auc_results
+        
+        # Calculate AUC on selected test set
+        auc_results, error = calculate_auc_on_test_set(current_model, dataset_key=dataset_key)
+        
+        if error:
+            # Model is still loaded, just without AUC metrics
+            print(f"⚠️  Warning: {error}")
+            model_info['auc_error'] = error
+        else:
+            # Add AUC results to model info
+            model_info['auc_results'] = auc_results
         
         # Convert all to serializable types
         model_info = convert_to_serializable(model_info)

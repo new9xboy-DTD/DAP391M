@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import { predictImage } from '../utils/api';
-import './ImageDropzone.css';
 
 const ImageDropzone = ({ onPredictionComplete }) => {
   const [dragActive, setDragActive] = useState(false);
@@ -18,28 +17,7 @@ const ImageDropzone = ({ onPredictionComplete }) => {
     }
   }, []);
 
-  const handleDrop = useCallback(async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    setError(null);
-
-    const files = e.dataTransfer.files;
-    if (files && files[0]) {
-      await handleFile(files[0]);
-    }
-  }, []);
-
-  const handleChange = async (e) => {
-    e.preventDefault();
-    setError(null);
-    
-    if (e.target.files && e.target.files[0]) {
-      await handleFile(e.target.files[0]);
-    }
-  };
-
-  const handleFile = async (file) => {
+  const handleFile = useCallback(async (file) => {
     // Validate file type (both MIME type and extension)
     const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
     const fileName = file.name.toLowerCase();
@@ -68,12 +46,42 @@ const ImageDropzone = ({ onPredictionComplete }) => {
     } finally {
       setUploading(false);
     }
+  }, [onPredictionComplete]);
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    setError(null);
+
+    const files = e.dataTransfer.files;
+    if (files && files[0]) {
+      await handleFile(files[0]);
+    }
+  }, [handleFile]);
+
+  const handleChange = async (e) => {
+    e.preventDefault();
+    setError(null);
+    
+    if (e.target.files && e.target.files[0]) {
+      await handleFile(e.target.files[0]);
+    }
   };
 
   return (
-    <div className="image-dropzone">
+    <div className="w-full">
       <div
-        className={`dropzone ${dragActive ? 'drag-active' : ''} ${uploading ? 'uploading' : ''}`}
+        className={`
+          border-3 border-dashed rounded-2xl p-10 text-center cursor-pointer 
+          transition-all duration-300 min-h-[300px] flex items-center justify-center
+          ${dragActive 
+            ? 'border-primary-500 bg-primary-100 scale-[1.02]' 
+            : uploading 
+              ? 'border-secondary-500 bg-secondary-50' 
+              : 'border-gray-300 bg-gray-50 hover:border-primary-500 hover:bg-primary-50'
+          }
+        `}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -84,39 +92,40 @@ const ImageDropzone = ({ onPredictionComplete }) => {
           id="image-upload"
           accept="image/*"
           onChange={handleChange}
-          className="file-input"
+          className="hidden"
         />
         
         {preview ? (
-          <div className="preview-container">
-            <img src={preview} alt="Preview" className="preview-image" />
+          <div className="relative w-full max-w-md mx-auto">
+            <img src={preview} alt="Preview" className="w-full max-h-96 object-contain rounded-xl shadow-lg" />
             {uploading && (
-              <div className="upload-overlay">
-                <div className="spinner-small"></div>
-                <p>Analyzing image...</p>
+              <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center rounded-xl text-white">
+                <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin mb-3"></div>
+                <p className="font-medium">Analyzing image...</p>
               </div>
             )}
           </div>
         ) : (
-          <label htmlFor="image-upload" className="upload-label">
-            <div className="upload-icon">📸</div>
-            <p className="upload-text">
+          <label htmlFor="image-upload" className="flex flex-col items-center cursor-pointer w-full">
+            <div className="text-6xl mb-5">📸</div>
+            <p className="text-xl text-gray-800 font-medium mb-2">
               {uploading ? 'Processing...' : 'Drag & drop an image or click to upload'}
             </p>
-            <p className="upload-hint">Supports: JPG, PNG, JPEG</p>
+            <p className="text-sm text-gray-400">Supports: JPG, PNG, JPEG</p>
           </label>
         )}
       </div>
 
       {error && (
-        <div className="error-message">
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mt-4 border border-red-200">
           ⚠️ {error}
         </div>
       )}
 
       {preview && !uploading && (
         <button 
-          className="reset-button"
+          className="mt-5 px-8 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 text-white rounded-lg font-semibold 
+                     transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary-500/40 active:translate-y-0"
           onClick={() => {
             setPreview(null);
             onPredictionComplete(null);
