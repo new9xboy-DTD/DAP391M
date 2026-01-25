@@ -20,6 +20,8 @@ import torchvision.transforms as transforms
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score
 import io
 import base64
+import time
+from tqdm import tqdm
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -30,6 +32,52 @@ from torchvision import datasets
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
+
+
+def get_available_device():
+    """
+    Auto-detect the best available device for inference.
+    Priority: CUDA GPU > DirectML (Windows) > Intel XPU (Linux) > Huawei NPU > CPU
+    
+    Returns:
+        torch.device or str: Device for PyTorch operations
+    """
+    # Check CUDA GPU (NVIDIA)
+    if torch.cuda.is_available():
+        print("✅ Using CUDA GPU")
+        return 'cuda'
+    
+    # Check DirectML (Windows - supports Intel Arc, AMD, NVIDIA)
+    try:
+        import torch_directml
+        dml_device = torch_directml.device()
+        print(f"✅ Using DirectML: {torch_directml.device_name(0)}")
+        return dml_device
+    except ImportError:
+        pass
+    
+    # Check Intel NPU/XPU (Linux only - Intel Extension for PyTorch)
+    try:
+        import intel_extension_for_pytorch as ipex
+        if hasattr(torch, 'xpu') and torch.xpu.is_available():
+            print("✅ Using Intel XPU")
+            return 'xpu'
+    except ImportError:
+        pass
+    
+    # Check Huawei Ascend NPU
+    try:
+        import torch_npu
+        if torch.npu.is_available():
+            print("✅ Using Huawei NPU")
+            return 'npu'
+    except ImportError:
+        pass
+    
+    # Fallback to CPU
+    print("ℹ️ Using CPU (no GPU/NPU detected)")
+    return 'cpu'
+
 
 # Global model variable - No default model loaded
 current_model = None
@@ -81,7 +129,7 @@ def create_test_loader(dataset_key='default', batch_size=32, num_workers=2):
     
     Args:
         dataset_key: Key for dataset in Config.DATASETS
-        batch_size: Batch size for data loader
+        batch_size: Batch size for data loader (larger = faster on CPU)
         num_workers: Number of workers for data loading
         
     Returns:
@@ -125,43 +173,64 @@ def create_test_loader(dataset_key='default', batch_size=32, num_workers=2):
         return None
 
 
-def calculate_auc_on_test_set(model, dataset_key='default', device=Config.DEVICE):
+def calculate_auc_on_test_set(model, dataset_key='default', device=None):
     """
     Calculate AUC on the test dataset
     
     Args:
         model: Model to evaluate
         dataset_key: Key for dataset in Config.DATASETS
+        device: Device to run inference on (cuda, cpu, npu, xpu, etc.)
         
     Returns:
         tuple: (results dict, error message)
     """
     try:
-        print(f"📊 Calculating AUC on test set (dataset: {dataset_key})...")
+        # Auto-detect device if not specified
+        if device is None:
+            device = get_available_device()
         
-        # Load test dataset
-        test_loader = create_data_loaders(batch_size=Config.STAGE1_BATCH_SIZE, num_workers=Config.NUM_WORKERS).get('test')
+        print(f"📊 Calculating AUC on test set (dataset: {dataset_key}, device: {device})...")
+        
+        # Use larger batch size for CPU efficiency (64-128 is good for 10k samples)
+        # Larger batch = fewer forward passes = faster total time
+        batch_size = 64 if str(device) == 'cpu' else Config.STAGE1_BATCH_SIZE
+        num_workers = 0 if str(device) == 'cpu' else Config.NUM_WORKERS  # 0 workers is often faster on Windows
+        
+        # Load test dataset using the specified dataset_key
+        test_loader = create_test_loader(dataset_key=dataset_key, batch_size=batch_size, num_workers=num_workers)
         
         if test_loader is None:
             return None, f"Test dataset '{dataset_key}' not available"
         
+        total_samples = len(test_loader.dataset)
+        print(f"📦 Total samples: {total_samples}, Batch size: {batch_size}, Batches: {len(test_loader)}")
+        
+        # Move model to device and set to eval mode
+        model = model.to(device)
         model.eval()
+        
         all_labels = []
         all_probs = []
         all_preds = []
         
+        start_time = time.time()
+        
         with torch.no_grad():
-            for images, labels in test_loader:
+            for images, labels in tqdm(test_loader, desc="🔄 Evaluating", unit="batch"):
                 images = images.to(device)
-                labels = labels.to(device)
                 
                 outputs = model(images)
                 probs = torch.softmax(outputs, dim=1)
                 preds = torch.argmax(probs, dim=1)
                 
-                all_labels.extend(labels.cpu().numpy())
+                all_labels.extend(labels.numpy())
                 all_probs.extend(probs[:, 1].cpu().numpy())  # Probability of "Real" class
                 all_preds.extend(preds.cpu().numpy())
+        
+        elapsed_time = time.time() - start_time
+        samples_per_sec = total_samples / elapsed_time
+        print(f"⏱️  Inference completed in {elapsed_time:.1f}s ({samples_per_sec:.1f} samples/sec)")
         
         # Calculate metrics
         all_labels = np.array(all_labels)
@@ -236,8 +305,12 @@ def predict():
         image_file = request.files['image']
         image = Image.open(image_file.stream).convert('RGB')
         
-        # Preprocess
-        image_tensor = preprocess_image(image).to(Config.DEVICE)
+        # Preprocess and move to available device
+        device = get_available_device()
+        image_tensor = preprocess_image(image).to(device)
+        
+        # Ensure model is on the same device
+        current_model.to(device)
         
         # Predict
         with torch.no_grad():
@@ -285,12 +358,13 @@ def analyze_model():
         model_file.save(model_path)
         
         # Load the model using model factory
-        print(f"🔄 Loading uploaded model from: {model_path}")
+        device = get_available_device()
+        print(f"🔄 Loading uploaded model from: {model_path} (device: {device})")
         
         try:
             new_model, new_model_info = load_model_from_checkpoint(
                 model_path, 
-                device=Config.DEVICE,
+                device=device,
                 strict=False
             )
         except Exception as load_error:
