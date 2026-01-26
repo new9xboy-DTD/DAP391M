@@ -189,7 +189,8 @@ class FeatureFusion(nn.Module):
 
 class CrossAttentionFusion(nn.Module):
     """
-    Cross-attention fusion between Xception spatial tokens and ViT tokens
+    One-way cross-attention:
+    Xception attends to ViT (X <- V)
     """
 
     def __init__(
@@ -197,7 +198,7 @@ class CrossAttentionFusion(nn.Module):
         xception_dim=Config.XCEPTION_DIM,
         vit_dim=Config.VIT_DIM,
         fusion_dim=Config.FUSION_DIM,
-        num_heads=8,
+        num_heads=2,
         dropout=0.1
     ):
         super(CrossAttentionFusion, self).__init__()
@@ -214,12 +215,12 @@ class CrossAttentionFusion(nn.Module):
             dropout=dropout,
             batch_first=True
         )
-        self.attn_v_to_x = nn.MultiheadAttention(
-            embed_dim=fusion_dim,
-            num_heads=num_heads,
-            dropout=dropout,
-            batch_first=True
-        )
+        # self.attn_v_to_x = nn.MultiheadAttention(
+        #     embed_dim=fusion_dim,
+        #     num_heads=num_heads,
+        #     dropout=dropout,
+        #     batch_first=True
+        # )
 
         self.norm_x = nn.LayerNorm(fusion_dim)
         self.norm_v = nn.LayerNorm(fusion_dim)
@@ -246,16 +247,16 @@ class CrossAttentionFusion(nn.Module):
         # Compute attention in fp32 for stability under AMP
         with torch.amp.autocast(device_type=x.device.type, enabled=False):
             x_attn, _ = self.attn_x_to_v(query=x.float(), key=v.float(), value=v.float())
-            v_attn, _ = self.attn_v_to_x(query=v.float(), key=x.float(), value=x.float())
+            # v_attn, _ = self.attn_v_to_x(query=v.float(), key=x.float(), value=x.float())
 
         x = self.norm_x(x + x_attn.to(x.dtype))
-        v = self.norm_v(v + v_attn.to(v.dtype))
+        # v = self.norm_v(v + v_attn.to(v.dtype))
 
         x_pooled = x.mean(dim=1)
         v_pooled = v.mean(dim=1)
         fused = torch.cat([x_pooled, v_pooled], dim=1)
-
         fused_features = self.fusion(fused)
+        
         return fused_features
 
 
@@ -390,8 +391,8 @@ class ViXNet(nn.Module):
     def unfreeze_high_level_layers(self):
         """
         Unfreeze high-level layers for Stage 2 fine-tuning
-        - Xception: last 15 layers
-        - ViT: last 3 transformer encoder blocks
+        - Xception: 15% last layers
+        - ViT: last 2 transformer encoder blocks
         """
         print("🔓 Unfreezing high-level layers (Stage 2)...")
         
@@ -399,8 +400,8 @@ class ViXNet(nn.Module):
         # Xception has blocks numbered, we'll unfreeze the last few
         xception_modules = list(self.xception_branch.xception.named_children())
         
-        # Typically unfreeze the last 15 layers for fine-tuning
-        num_to_unfreeze = 20
+        # Typically unfreeze the last 15% layers for fine-tuning
+        num_to_unfreeze = int(0.15 * len(xception_modules))
         
         for name, module in xception_modules[-num_to_unfreeze:]:
             for param in module.parameters():
@@ -409,8 +410,8 @@ class ViXNet(nn.Module):
         # Unfreeze last transformer blocks of ViT
         if hasattr(self.vit_branch.vit, 'blocks'):
             vit_blocks = self.vit_branch.vit.blocks
-            # Unfreeze last 4 blocks
-            num_blocks_to_unfreeze = min(4, len(vit_blocks))
+            # Unfreeze last 2 blocks
+            num_blocks_to_unfreeze = min(2, len(vit_blocks))
             for block in vit_blocks[-num_blocks_to_unfreeze:]:
                 for param in block.parameters():
                     param.requires_grad = True
@@ -440,7 +441,7 @@ class ViXNetCrossAttention(nn.Module):
         fusion_dim=Config.FUSION_DIM,
         num_classes=2,
         vit_model_name=Config.VIT_MODEL_NAME,
-        num_heads=8,
+        num_heads=2,
         dropout=0.1
     ):
         super(ViXNetCrossAttention, self).__init__()
@@ -513,20 +514,20 @@ class ViXNetCrossAttention(nn.Module):
     def unfreeze_high_level_layers(self):
         """
         Unfreeze high-level layers for Stage 2 fine-tuning
-        - Xception: last 15 layers
-        - ViT: last 3 transformer encoder blocks
+        - Xception: last 15% layers
+        - ViT: last 2 transformer encoder blocks
         """
         print("🔓 Unfreezing high-level layers (Stage 2)...")
 
         xception_modules = list(self.xception_branch.xception.named_children())
-        num_to_unfreeze = 15
+        num_to_unfreeze = int(0.15 * len(xception_modules))
         for name, module in xception_modules[-num_to_unfreeze:]:
             for param in module.parameters():
                 param.requires_grad = True
 
         if hasattr(self.vit_branch.vit, 'blocks'):
             vit_blocks = self.vit_branch.vit.blocks
-            num_blocks_to_unfreeze = min(3, len(vit_blocks))
+            num_blocks_to_unfreeze = min(2, len(vit_blocks))
             for block in vit_blocks[-num_blocks_to_unfreeze:]:
                 for param in block.parameters():
                     param.requires_grad = True
@@ -594,16 +595,17 @@ class XceptionOnly(nn.Module):
         for param in self.xception_branch.parameters():
             param.requires_grad = False
     
-    def unfreeze_high_level_layers(self, num_layers_to_unfreeze=30):
+    def unfreeze_high_level_layers(self):
         """
         Unfreeze Xception for stage 2 training
         
         Args:
             num_layers_to_unfreeze: Number of last layers to unfreeze (default: 30)
         """
-        layers = list(self.xception_branch.children())
+        layers = list(self.xception_branch.named_children())
+        num_layers_to_unfreeze = int(0.2 * len(layers))
         
-        for layer in layers[-num_layers_to_unfreeze:]:
+        for name, layer in layers[-num_layers_to_unfreeze:]:
             for p in layer.parameters():
                 p.requires_grad = True
                 
@@ -676,15 +678,15 @@ class ViTOnly(nn.Module):
     def unfreeze_high_level_layers(self):
         """
         Unfreeze high-level layers for Stage 2 fine-tuning
-        - ViT: last 1/2 transformer encoder blocks
+        - ViT: last 3 transformer encoder blocks
         """
         print("🔓 Unfreezing high-level layers (Stage 2)...")
         
         # Unfreeze last transformer blocks of ViT
         if hasattr(self.vit_branch.vit, 'blocks'):
             vit_blocks = self.vit_branch.vit.blocks
-            # Unfreeze last 1/2 blocks
-            num_blocks_to_unfreeze = len(vit_blocks) // 2
+            # Unfreeze last 3 blocks
+            num_blocks_to_unfreeze = min(len(vit_blocks), 3)
             for block in vit_blocks[-num_blocks_to_unfreeze:]:
                 for param in block.parameters():
                     param.requires_grad = True

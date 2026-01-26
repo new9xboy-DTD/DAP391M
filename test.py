@@ -1,107 +1,82 @@
-import torch
-import torch.nn as nn
+import os
+import shutil
+import random
+from collections import defaultdict
+from tqdm import tqdm
 
-class CrossAttention(nn.Module):
-    """Cross-Attention: dùng đặc trưng ViT làm Query và đặc trưng CNN làm Key/Value.
+# ===== CONFIG =====
+SRC_ROOT = "D:\\FPT\\DAP391m\\FF++"     # thư mục gốc hiện tại
+DST_ROOT = "D:\\FPT\\DAP391m\\FaceForensics"   # thư mục output
 
-    Ý tưởng:
-    - ViT (q) đang có các token (patch token + có thể có CLS token) cần được "tái chú ý" (attend)
-      lên thông tin không gian/chi tiết từ CNN (kv).
-    - CNN (kv) cung cấp ngữ cảnh bổ sung làm Key/Value.
+TRAIN_RATIO = 0.7
+VAL_RATIO = 0.15
+TEST_RATIO = 0.15
 
-    Input/Output:
-    - q:  (B, Nq, D)
-    - kv: (B, Nk, D)
-    - out:(B, Nq, D)
+random.seed(42)
+
+# ===== HELPER FUNCTIONS =====
+def get_video_id(filename):
     """
-    def __init__(self, dim, num_heads=8, dropout=0.1):
-        super().__init__()
-        # num_heads: số head trong multi-head attention
-        self.num_heads = num_heads
-        # head_dim: số chiều mỗi head. dim phải chia hết cho num_heads
-        self.head_dim = dim // num_heads
-        # scale = 1/sqrt(head_dim) để ổn định softmax (tránh giá trị quá lớn)
-        self.scale = self.head_dim ** -0.5
-
-        # Linear projection để tạo Q, K, V từ q và kv
-        self.q_proj = nn.Linear(dim, dim)
-        self.k_proj = nn.Linear(dim, dim)
-        self.v_proj = nn.Linear(dim, dim)
-
-        # Chiếu ngược về dim ban đầu sau khi ghép multi-head
-        self.out_proj = nn.Linear(dim, dim)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, q, kv):
-        # q: (B, Nq, D)   ← đặc trưng/token từ ViT
-        # kv: (B, Nk, D)  ← đặc trưng/token từ CNN (đã reshape về dạng chuỗi token)
-        B, Nq, D = q.shape
-        Nk = kv.shape[1]
-
-        # Tạo Q, K, V
-        Q = self.q_proj(q)
-        K = self.k_proj(kv)
-        V = self.v_proj(kv)
-
-        # Reshape sang multi-head:
-        # (B, N, D) -> (B, N, num_heads, head_dim) -> transpose -> (B, num_heads, N, head_dim)
-        Q = Q.view(B, Nq, self.num_heads, self.head_dim).transpose(1, 2)
-        K = K.view(B, Nk, self.num_heads, self.head_dim).transpose(1, 2)
-        V = V.view(B, Nk, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # Tính attention score giữa mỗi query token (Nq) và mỗi key token (Nk)
-        # attn shape: (B, num_heads, Nq, Nk)
-        attn = (Q @ K.transpose(-2, -1)) * self.scale
-        # Chuẩn hoá theo Nk để ra trọng số attention
-        attn = attn.softmax(dim=-1)
-        # Dropout lên attention weights để regularize
-        attn = self.dropout(attn)
-
-        # Tổng có trọng số lên V để ra output từng head
-        # out shape: (B, num_heads, Nq, head_dim)
-        out = attn @ V
-        # Ghép các head lại:
-        # (B, num_heads, Nq, head_dim) -> (B, Nq, num_heads, head_dim) -> (B, Nq, D)
-        out = out.transpose(1, 2).contiguous().view(B, Nq, D)
-
-        # Chiếu ra output cuối cùng (vẫn giữ shape (B, Nq, D))
-        return self.out_proj(out)
-      
-class CrossAttentionBlock(nn.Module):
-    """Một block kiểu Transformer nhưng attention là cross-attention.
-
-    Cấu trúc:
-    1) LayerNorm + CrossAttention + residual
-    2) LayerNorm + MLP (FFN) + residual
-
-    Input:
-    - vit_feat: (B, Nq, D)  token của ViT
-    - cnn_feat: (B, Nk, D)  token của CNN
-    Output:
-    - (B, Nq, D)
+    000_003_0001.png -> 000_003
     """
-    def __init__(self, dim, num_heads=8, mlp_ratio=4.0, dropout=0.1):
-        super().__init__()
-        # Pre-Norm: chuẩn hoá trước attention
-        self.norm1 = nn.LayerNorm(dim)
-        self.attn = CrossAttention(dim, num_heads, dropout)
+    return "_".join(filename.split("_")[:2])
 
-        # Pre-Norm: chuẩn hoá trước MLP/FFN
-        self.norm2 = nn.LayerNorm(dim)
-        # MLP/FFN: mở rộng dim lên dim*mlp_ratio rồi giảm lại dim
-        self.mlp = nn.Sequential(
-            nn.Linear(dim, int(dim * mlp_ratio)),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(int(dim * mlp_ratio), dim),
-            nn.Dropout(dropout)
-        )
+def collect_by_video(class_dir, label):
+    """
+    Gom ảnh theo video ID
+    """
+    video_dict = defaultdict(list)
+    print("class_dir:", class_dir)
+    dirs = os.listdir(class_dir)
+    for d in dirs:
+        for root, _, files in os.walk(os.path.join(class_dir, d)):
+            if label.lower() == "fake":
+                vids = os.listdir(root)
+                for vid in vids:
+                    for f in files:
+                        if not f.lower().endswith(".png"):
+                            continue
+                        video_dict[vid].append(os.path.join(root, f))
+            else:
+                for f in files:
+                    if not f.lower().endswith(".png"):
+                        continue
+                    vid = d
+                    video_dict[vid].append(os.path.join(root, f))
 
-    def forward(self, vit_feat, cnn_feat):
-        # 1) Cross-attention (ViT query attend sang CNN key/value)
-        # residual: giữ thông tin gốc + thêm thông tin từ attention
-        x = vit_feat + self.attn(self.norm1(vit_feat), cnn_feat)
-        # 2) MLP/FFN
-        # residual: giúp học ổn định và sâu hơn
-        x = x + self.mlp(self.norm2(x))
-        return x
+    return video_dict
+
+def split_video_ids(video_ids):
+    random.shuffle(video_ids)
+    n = len(video_ids)
+
+    n_train = int(n * TRAIN_RATIO)
+    n_val = int(n * VAL_RATIO)
+
+    return {
+        "train": video_ids[:n_train],
+        "val": video_ids[n_train:n_train + n_val],
+        "test": video_ids[n_train + n_val:]
+    }
+
+def copy_split(video_split, video_dict, label):
+    for split, vids in video_split.items():
+        for vid in tqdm(vids):
+            for src_path in video_dict[vid]:
+                method = os.path.basename(os.path.dirname(src_path))
+                dst_dir = os.path.join(DST_ROOT, split, label)
+                os.makedirs(dst_dir, exist_ok=True)
+                if not os.path.exists(os.path.join(dst_dir, f"{method}_{os.path.basename(src_path)}")):
+                    shutil.copy(src_path, os.path.join(dst_dir, f"{method}_{os.path.basename(src_path)}"))
+
+# ===== MAIN =====
+for label in ["Fake", "Real"]:
+    class_dir = os.path.join(SRC_ROOT, label.lower())
+    video_dict = collect_by_video(class_dir, label)
+
+    video_ids = list(video_dict.keys())
+    split = split_video_ids(video_ids)
+
+    copy_split(split, video_dict, label)
+
+print("✅ Done splitting dataset!")
