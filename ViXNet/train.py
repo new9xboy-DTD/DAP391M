@@ -122,8 +122,9 @@ def train_stage(
     print(f"   Weight decay: {stage_config['weight_decay']}")
     print("="*70)
     
+    class_weights = torch.tensor(Config.WEIGHT_DATASET).to(Config.DEVICE)
     # Setup training components
-    criterion = nn.CrossEntropyLoss(label_smoothing=Config.LABEL_SMOOTHING)
+    criterion = nn.CrossEntropyLoss(label_smoothing=Config.LABEL_SMOOTHING, weight=class_weights)
     optimizer = get_optimizer(model, stage_config['lr'], stage_config['weight_decay'])
     scheduler = get_scheduler(optimizer, stage_config['epochs'], stage_config['lr'])
     

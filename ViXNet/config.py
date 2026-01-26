@@ -72,6 +72,7 @@ class Config:
     OPTIMIZER = 'adamw'  # AdamW optimizer
     MOMENTUM = 0.9  # For SGD (if used)
     SCHEDULER = 'cosine'  # Learning rate scheduler: 'cosine', 'step', 'plateau'
+    WEIGHT_DATASET = [0.75, 0.25]  # Class weights for imbalanced dataset
     
     # Scheduler parameters
     STEP_SIZE = 5  # For StepLR
