@@ -58,29 +58,30 @@ class Config:
     
     # Stage 1: Feature extractor frozen
     STAGE1_EPOCHS = 5
-    STAGE1_BATCH_SIZE = 32
-    STAGE1_LR = 1e-3  # Higher learning rate for new layers
+    STAGE1_BATCH_SIZE = 16
+    STAGE1_LR = 3e-5  # Higher learning rate for new layers
     STAGE1_WEIGHT_DECAY = 0.01
     
     # Stage 2: Fine-tuning high-level layers
-    STAGE2_EPOCHS = 20
-    STAGE2_BATCH_SIZE = 32
-    STAGE2_LR = 1e-5  # Very low learning rate for fine-tuning
+    STAGE2_EPOCHS = 10
+    STAGE2_BATCH_SIZE = 16
+    STAGE2_LR = 1e-6  # Very low learning rate for fine-tuning
     STAGE2_WEIGHT_DECAY = 0.01
     
     # ==================== OPTIMIZATION ====================
     OPTIMIZER = 'adamw'  # AdamW optimizer
     MOMENTUM = 0.9  # For SGD (if used)
     SCHEDULER = 'cosine'  # Learning rate scheduler: 'cosine', 'step', 'plateau'
+    WEIGHT_DATASET = [0.75, 0.25]  # Class weights for imbalanced dataset
     
     # Scheduler parameters
     STEP_SIZE = 5  # For StepLR
     GAMMA = 0.5  # LR decay factor
-    T_MAX = 30  # For CosineAnnealingLR (total epochs)
+    T_MAX = 15  # For CosineAnnealingLR (total epochs)
     
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
-    LABEL_SMOOTHING = 0  # Label smoothing for CrossEntropyLoss
+    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
     
     # ==================== DATA LOADING ====================
     NUM_WORKERS = 8  # Number of workers for data loading
@@ -97,7 +98,7 @@ class Config:
     SAVE_EVERY_EPOCH = True  # Save checkpoint after every epoch
     
     # ==================== EARLY STOPPING ====================
-    PATIENCE = 7  # Early stopping patience (epochs)
+    PATIENCE = 5  # Early stopping patience (epochs)
     MIN_DELTA = 0.001  # Minimum improvement to reset patience
     
     # ==================== TESTING ====================
@@ -106,7 +107,7 @@ class Config:
     # ==================== AUGMENTATION ====================
     # Data augmentation probabilities
     HORIZONTAL_FLIP_PROB = 0.5
-    ROTATION_DEGREES = 15
+    ROTATION_DEGREES = 10
     COLOR_JITTER_BRIGHTNESS = 0.2
     COLOR_JITTER_CONTRAST = 0.2
     COLOR_JITTER_SATURATION = 0.2
@@ -114,7 +115,7 @@ class Config:
     
     # Advanced augmentations
     USE_RANDOM_ERASING = True  # Random erasing augmentation
-    RANDOM_ERASING_PROB = 0.3
+    RANDOM_ERASING_PROB = 0.15
     
     @classmethod
     def print_config(cls):
