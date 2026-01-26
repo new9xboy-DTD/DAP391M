@@ -59,13 +59,13 @@ class Config:
     # Stage 1: Feature extractor frozen
     STAGE1_EPOCHS = 5
     STAGE1_BATCH_SIZE = 16
-    STAGE1_LR = 5e-5  # Higher learning rate for new layers
+    STAGE1_LR = 3e-5  # Higher learning rate for new layers
     STAGE1_WEIGHT_DECAY = 0.01
     
     # Stage 2: Fine-tuning high-level layers
     STAGE2_EPOCHS = 10
     STAGE2_BATCH_SIZE = 16
-    STAGE2_LR = 5e-6  # Very low learning rate for fine-tuning
+    STAGE2_LR = 1e-6  # Very low learning rate for fine-tuning
     STAGE2_WEIGHT_DECAY = 0.01
     
     # ==================== OPTIMIZATION ====================
@@ -80,7 +80,7 @@ class Config:
     
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
-    LABEL_SMOOTHING = 0.05  # Label smoothing for CrossEntropyLoss
+    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
     
     # ==================== DATA LOADING ====================
     NUM_WORKERS = 8  # Number of workers for data loading
@@ -106,7 +106,7 @@ class Config:
     # ==================== AUGMENTATION ====================
     # Data augmentation probabilities
     HORIZONTAL_FLIP_PROB = 0.5
-    ROTATION_DEGREES = 15
+    ROTATION_DEGREES = 10
     COLOR_JITTER_BRIGHTNESS = 0.2
     COLOR_JITTER_CONTRAST = 0.2
     COLOR_JITTER_SATURATION = 0.2
@@ -114,7 +114,7 @@ class Config:
     
     # Advanced augmentations
     USE_RANDOM_ERASING = True  # Random erasing augmentation
-    RANDOM_ERASING_PROB = 0.3
+    RANDOM_ERASING_PROB = 0.15
     
     @classmethod
     def print_config(cls):
