@@ -31,19 +31,21 @@ def collect_by_video(class_dir, label):
     for d in dirs:
         for root, _, files in os.walk(os.path.join(class_dir, d)):
             if label.lower() == "fake":
+                
                 vids = os.listdir(root)
                 for vid in vids:
-                    for f in files:
-                        if not f.lower().endswith(".png"):
-                            continue
-                        video_dict[vid].append(os.path.join(root, f))
+                    for root2, _, files2 in os.walk(os.path.join(root, vid)):
+                        filterd = files2[::2]
+                        for f in filterd:
+                            if not f.lower().endswith(".png"):
+                                continue
+                            video_dict[vid].append(os.path.join(root2, f))
             else:
                 for f in files:
                     if not f.lower().endswith(".png"):
                         continue
                     vid = d
                     video_dict[vid].append(os.path.join(root, f))
-
     return video_dict
 
 def split_video_ids(video_ids):
@@ -63,14 +65,15 @@ def copy_split(video_split, video_dict, label):
     for split, vids in video_split.items():
         for vid in tqdm(vids):
             for src_path in video_dict[vid]:
-                method = os.path.basename(os.path.dirname(src_path))
+                method = os.path.basename(os.path.dirname(os.path.dirname(src_path)))
+                vid = os.path.basename(os.path.dirname(src_path))
                 dst_dir = os.path.join(DST_ROOT, split, label)
                 os.makedirs(dst_dir, exist_ok=True)
-                if not os.path.exists(os.path.join(dst_dir, f"{method}_{os.path.basename(src_path)}")):
-                    shutil.copy(src_path, os.path.join(dst_dir, f"{method}_{os.path.basename(src_path)}"))
+                if not os.path.exists(os.path.join(dst_dir, f"{method}_{vid}_{os.path.basename(src_path)}")):
+                    shutil.copy(src_path, os.path.join(dst_dir, f"{method}_{vid}_{os.path.basename(src_path)}"))
 
 # ===== MAIN =====
-for label in ["Fake", "Real"]:
+for label in ["Fake"]:
     class_dir = os.path.join(SRC_ROOT, label.lower())
     video_dict = collect_by_video(class_dir, label)
 
