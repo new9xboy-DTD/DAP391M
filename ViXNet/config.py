@@ -13,7 +13,7 @@ class Config:
     """
     
     # ==================== DATA PATHS ====================
-    DATA_DIR = os.path.join("D:\\FPT\\DAP391m", "Dataset")
+    DATA_DIR = os.path.join("D:\\Repo\\DAP391m", "Dataset")
     TRAIN_DIR = os.path.join(DATA_DIR, "Train")
     VAL_DIR = os.path.join(DATA_DIR, "Validation")
     TEST_DIR = os.path.join(DATA_DIR, "Test")
@@ -22,17 +22,17 @@ class Config:
     DATASETS = {
         'default': {
             'name': 'Default Dataset',
-            'path': os.path.join("D:\\FPT\\DAP391m", "Dataset"),
-            'train': os.path.join("D:\\FPT\\DAP391m", "Dataset", "Train"),
-            'val': os.path.join("D:\\FPT\\DAP391m", "Dataset", "Validation"),
-            'test': os.path.join("D:\\FPT\\DAP391m", "Dataset", "Test")
+            'path': os.path.join("D:\\Repo\\DAP391m", "Dataset"),
+            'train': os.path.join("D:\\Repo\\DAP391m", "Dataset", "Train"),
+            'val': os.path.join("D:\\Repo\\DAP391m", "Dataset", "Validation"),
+            'test': os.path.join("D:\\Repo\\DAP391m", "Dataset", "Test")
         },
         'celeb': {
             'name': 'CelebDF (V2)',
-            'path': os.path.join("D:\\FPT\\DAP391m", "Celeb_V2"),
-            'train': os.path.join("D:\\FPT\\DAP391m", "Celeb_V2", "Train"),
-            'val': os.path.join("D:\\FPT\\DAP391m", "Celeb_V2", "Validation"),
-            'test': os.path.join("D:\\FPT\\DAP391m", "Celeb_V2", "Test")
+            'path': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2"),
+            'train': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Train"),
+            'val': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Validation"),
+            'test': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Test")
         },
         # Add more datasets here in the future
         # 'dataset2': {
