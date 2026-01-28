@@ -13,19 +13,19 @@ class Config:
     """
     
     # ==================== DATA PATHS ====================
-    DATA_DIR = os.path.join("D:\\Repo\\DAP391m", "Dataset")
-    TRAIN_DIR = os.path.join(DATA_DIR, "Train")
-    VAL_DIR = os.path.join(DATA_DIR, "Validation")
-    TEST_DIR = os.path.join(DATA_DIR, "Test")
+    DATA_DIR = os.path.join("D:\\Repo\\DAP391m", "FaceForensics")
+    TRAIN_DIR = os.path.join(DATA_DIR, "train")
+    VAL_DIR = os.path.join(DATA_DIR, "val")
+    TEST_DIR = os.path.join(DATA_DIR, "test")
     
     # Multiple dataset configurations
     DATASETS = {
         'default': {
             'name': 'Default Dataset',
-            'path': os.path.join("D:\\Repo\\DAP391m", "Dataset"),
-            'train': os.path.join("D:\\Repo\\DAP391m", "Dataset", "Train"),
-            'val': os.path.join("D:\\Repo\\DAP391m", "Dataset", "Validation"),
-            'test': os.path.join("D:\\Repo\\DAP391m", "Dataset", "Test")
+            'path': os.path.join("D:\\Repo\\DAP391m", "FaceForensics"),
+            'train': os.path.join("D:\\Repo\\DAP391m", "FaceForensics", "train"),
+            'val': os.path.join("D:\\Repo\\DAP391m", "FaceForensics", "val"),
+            'test': os.path.join("D:\\Repo\\DAP391m", "FaceForensics", "test")
         },
         'celeb': {
             'name': 'CelebDF (V2)',
@@ -34,6 +34,13 @@ class Config:
             'val': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Validation"),
             'test': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Test")
         },
+        'wilddeepfake': {
+            'name': 'WildDeepfake',
+            'path': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake"),
+            'train': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake", "train"),
+            'val': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake", "val"),
+            'test': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake_20k")
+        }
         # Add more datasets here in the future
         # 'dataset2': {
         #     'name': 'Another Dataset',
@@ -51,20 +58,20 @@ class Config:
     # Model architecture dimensions
     XCEPTION_DIM = 2048  # Xception output dimension
     VIT_DIM = 768  # ViT output dimension
-    FUSION_DIM = 512  # Fusion layer dimension
+    FUSION_DIM = 512  # Fusion layer dimension 
     VIT_MODEL_NAME = 'vit_base_patch16_224'  # ViT model variant
     
     # ==================== TRAINING PARAMETERS ====================
     
     # Stage 1: Feature extractor frozen
     STAGE1_EPOCHS = 5
-    STAGE1_BATCH_SIZE = 16
-    STAGE1_LR = 3e-5  # Higher learning rate for new layers
+    STAGE1_BATCH_SIZE = 32
+    STAGE1_LR = 1e-4  # Higher learning rate for new layers
     STAGE1_WEIGHT_DECAY = 0.01
     
     # Stage 2: Fine-tuning high-level layers
     STAGE2_EPOCHS = 10
-    STAGE2_BATCH_SIZE = 16
+    STAGE2_BATCH_SIZE = 32
     STAGE2_LR = 1e-6  # Very low learning rate for fine-tuning
     STAGE2_WEIGHT_DECAY = 0.01
     
@@ -72,7 +79,7 @@ class Config:
     OPTIMIZER = 'adamw'  # AdamW optimizer
     MOMENTUM = 0.9  # For SGD (if used)
     SCHEDULER = 'cosine'  # Learning rate scheduler: 'cosine', 'step', 'plateau'
-    WEIGHT_DATASET = [0.75, 0.25]  # Class weights for imbalanced dataset
+    WEIGHT_DATASET = [1.0, 1.0]  # Class weights for imbalanced dataset
     
     # Scheduler parameters
     STEP_SIZE = 5  # For StepLR
@@ -111,7 +118,7 @@ class Config:
     COLOR_JITTER_BRIGHTNESS = 0.2
     COLOR_JITTER_CONTRAST = 0.2
     COLOR_JITTER_SATURATION = 0.2
-    COLOR_JITTER_HUE = 0.1
+    COLOR_JITTER_HUE = 0.02
     
     # Advanced augmentations
     USE_RANDOM_ERASING = True  # Random erasing augmentation

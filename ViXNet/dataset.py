@@ -25,7 +25,7 @@ def get_data_transforms(stage='train'):
     if stage == 'train':
         # Training augmentations for better generalization
         transform_list = [
-            transforms.Resize((Config.IMG_SIZE, Config.IMG_SIZE)),
+            transforms.RandomResizedCrop(Config.IMG_SIZE, scale=(0.8, 1.0), ratio=(0.75, 1.33)),
             transforms.RandomHorizontalFlip(p=Config.HORIZONTAL_FLIP_PROB),
             transforms.RandomRotation(Config.ROTATION_DEGREES),
             transforms.ColorJitter(
@@ -46,7 +46,7 @@ def get_data_transforms(stage='train'):
             transform_list.append(
                 transforms.RandomErasing(
                     p=Config.RANDOM_ERASING_PROB,
-                    scale=(0.02, 0.33),
+                    scale=(0.02, 0.15),
                     ratio=(0.3, 3.3),
                     value='random'
                 )
