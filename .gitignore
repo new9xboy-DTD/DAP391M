@@ -17,3 +17,7 @@ FF++/
 FaceForensics/
 *.zip
 wilddeepfake_20k/
+DFDC*/
+DFDC_*/
+real_vs_fake/
+FaceForensics*/

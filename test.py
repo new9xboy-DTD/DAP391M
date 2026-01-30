@@ -1,12 +1,11 @@
 import os
 import shutil
 import random
-from collections import defaultdict
 from tqdm import tqdm
 
 # ===== CONFIG =====
-SRC_ROOT = "D:\\Repo\\DAP391m\\Celeb_V2"     # thư mục gốc hiện tại
-DST_ROOT = "D:\\Repo\\DAP391m\\FaceForensics"   # thư mục output
+SRC_ROOT = "D:\\Repo\\DAP391m\\FaceForensics"     # Thư mục gốc có Train/Val/Test -> Fake/Real
+DST_ROOT = "D:\\Repo\\DAP391m\\FaceForensics_new"  # Thư mục output sau khi chia lại
 
 TRAIN_RATIO = 0.7
 VAL_RATIO = 0.15
@@ -15,81 +14,137 @@ TEST_RATIO = 0.15
 random.seed(42)
 
 # ===== HELPER FUNCTIONS =====
-def get_video_id(filename):
-    """
-    000_003_0001.png -> 000_003
-    """
-    return "_".join(filename.split("_")[:2])
 
-def collect_by_video(class_dir, label):
+def collect_all_images(src_root, label):
     """
-    Gom ảnh theo video ID
+    Gom tất cả ảnh của 1 label (Fake hoặc Real) từ Train + Val + Test
+    
+    Args:
+        src_root: Thư mục gốc chứa Train/Val/Test
+        label: 'Fake' hoặc 'Real'
+    
+    Returns:
+        List of (src_path, filename) tuples
     """
-    video_dict = defaultdict(list)
-    print("class_dir:", class_dir)
-    dirs = os.listdir(class_dir)
-    for d in dirs:
-        for root, _, files in os.walk(os.path.join(class_dir, d)):
-            if label.lower() == "fake":
-                
-                vids = os.listdir(root)
-                for vid in vids:
-                    for root2, _, files2 in os.walk(os.path.join(root, vid)):
-                        filterd = files2[::2]
-                        for f in filterd:
-                            if not f.lower().endswith(".png"):
-                                continue
-                            video_dict[vid].append(os.path.join(root2, f))
-            else:
-                for f in files:
-                    if not f.lower().endswith(".png"):
-                        continue
-                    vid = d
-                    video_dict[vid].append(os.path.join(root, f))
-    return video_dict
+    all_images = []
+    splits = ['train', 'val', 'test']  # Support cả lowercase
+    
+    for split in splits:
+        class_dir = os.path.join(src_root, split, label)
+        if not os.path.exists(class_dir):
+            continue
+        
+        for fname in os.listdir(class_dir):
+            fpath = os.path.join(class_dir, fname)
+            if os.path.isfile(fpath) and fname.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp')):
+                all_images.append((fpath, fname))
+    
+    return all_images
 
-def split_video_ids(video_ids):
-    random.shuffle(video_ids)
-    n = len(video_ids)
 
-    n_train = int(n * TRAIN_RATIO)
-    n_val = int(n * VAL_RATIO)
-
+def split_images(images, train_ratio, val_ratio, test_ratio):
+    """
+    Chia list ảnh thành train/val/test
+    
+    Args:
+        images: List of (src_path, filename) tuples
+        train_ratio, val_ratio, test_ratio: Tỉ lệ chia
+    
+    Returns:
+        Dict {'train': [...], 'val': [...], 'test': [...]}
+    """
+    random.shuffle(images)
+    n = len(images)
+    
+    n_train = int(n * train_ratio)
+    n_val = int(n * val_ratio)
+    
     return {
-        "train": video_ids[:n_train],
-        "val": video_ids[n_train:n_train + n_val],
-        "test": video_ids[n_train + n_val:]
+        'train': images[:n_train],
+        'val': images[n_train:n_train + n_val],
+        'test': images[n_train + n_val:]
     }
 
-def copy_split(video_split, video_dict, label):
-    for split, vids in video_split.items():
-        for vid in tqdm(vids):
-            for src_path in video_dict[vid]:
-                method = os.path.basename(os.path.dirname(os.path.dirname(src_path)))
-                vid = os.path.basename(os.path.dirname(src_path))
-                dst_dir = os.path.join(DST_ROOT, split, label)
-                os.makedirs(dst_dir, exist_ok=True)
-                if not os.path.exists(os.path.join(dst_dir, f"{method}_{vid}_{os.path.basename(src_path)}")):
-                    shutil.copy(src_path, os.path.join(dst_dir, f"{method}_{vid}_{os.path.basename(src_path)}"))
 
-def collect_img_paths(class_dir, label):
-    img_paths = os.listdir(os.path.join(class_dir, ))
-    return img_paths
+def copy_images(split_dict, label, dst_root):
+    """
+    Copy ảnh vào thư mục đích
+    
+    Args:
+        split_dict: Dict {'train': [...], 'val': [...], 'test': [...]}
+        label: 'Fake' hoặc 'Real'
+        dst_root: Thư mục đích
+    """
+    for split_name, images in split_dict.items():
+        dst_dir = os.path.join(dst_root, split_name, label)
+        os.makedirs(dst_dir, exist_ok=True)
+        
+        print(f"\n📂 Copying {len(images)} {label} images to {split_name}...")
+        
+        for src_path, fname in tqdm(images, desc=f"{split_name}/{label}"):
+            dst_path = os.path.join(dst_dir, fname)
+            
+            # Tránh ghi đè nếu file đã tồn tại với tên khác
+            if os.path.exists(dst_path):
+                # Thêm prefix để tránh trùng
+                base, ext = os.path.splitext(fname)
+                fname = f"{base}_{random.randint(1000, 9999)}{ext}"
+                dst_path = os.path.join(dst_dir, fname)
+            
+            shutil.copy2(src_path, dst_path)
+
 
 # ===== MAIN =====
-for split_type in ["Train", "Val"]:
+if __name__ == "__main__":
+    print("=" * 70)
+    print("🔄 RESHUFFLING DATASET")
+    print("=" * 70)
+    print(f"   Source: {SRC_ROOT}")
+    print(f"   Destination: {DST_ROOT}")
+    print(f"   Train/Val/Test ratio: {TRAIN_RATIO}/{VAL_RATIO}/{TEST_RATIO}")
+    print("=" * 70)
+    
+    # Xác nhận trước khi chạy
+    if os.path.exists(DST_ROOT):
+        confirm = input(f"\n⚠️  Destination folder exists: {DST_ROOT}\n   Continue? (yes/no): ")
+        if confirm.lower() not in ['yes', 'y']:
+            print("❌ Cancelled.")
+            exit()
+    
     for label in ["Fake", "Real"]:
-        class_dir = os.path.join(SRC_ROOT, split_type, label)
-        img_paths = collect_img_paths(class_dir, label)[::2]
+        print(f"\n{'='*70}")
+        print(f"📁 Processing {label} images...")
+        print("=" * 70)
         
-        print(f"Collected {len(img_paths)} images for {label} in {split_type} set.")
-        for img_path in tqdm(img_paths):
-            dst_dir = os.path.join(DST_ROOT, split_type.lower(), label)
-            os.makedirs(dst_dir, exist_ok=True)
-            shutil.copy(os.path.join(class_dir, img_path), os.path.join(dst_dir, f"CelebV2_{os.path.basename(img_path)}"))
-        # video_ids = list(video_dict.keys())
-        # split = split_video_ids(img_paths)
+        # 1. Gom tất cả ảnh
+        all_images = collect_all_images(SRC_ROOT, label)
+        print(f"   Total {label} images collected: {len(all_images):,}")
+        
+        if len(all_images) == 0:
+            print(f"   ⚠️  No {label} images found! Skipping...")
+            continue
+        
+        # 2. Chia train/val/test
+        split_dict = split_images(all_images, TRAIN_RATIO, VAL_RATIO, TEST_RATIO)
+        
+        print(f"   Split results:")
+        print(f"     - Train: {len(split_dict['train']):,} images")
+        print(f"     - Val:   {len(split_dict['val']):,} images")
+        print(f"     - Test:  {len(split_dict['test']):,} images")
+        
+        # 3. Copy vào thư mục đích
+        copy_images(split_dict, label, DST_ROOT)
+    
+    print("\n" + "=" * 70)
+    print("✅ Done reshuffling dataset!")
+    print("=" * 70)
+    
+    # Thống kê kết quả
+    print("\n📊 Final statistics:")
+    for split in ['train', 'val', 'test']:
+        for label in ['Fake', 'Real']:
+            path = os.path.join(DST_ROOT, split, label)
+            if os.path.exists(path):
+                count = len([f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])
+                print(f"   {split}/{label}: {count:,} images")
 
-        # copy_split(split, video_dict, label)
-
-print("✅ Done splitting dataset!")

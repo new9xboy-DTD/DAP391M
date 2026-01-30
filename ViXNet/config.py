@@ -13,7 +13,7 @@ class Config:
     """
     
     # ==================== DATA PATHS ====================
-    DATA_DIR = os.path.join("D:\\Repo\\DAP391m", "FaceForensics")
+    DATA_DIR = os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new")
     TRAIN_DIR = os.path.join(DATA_DIR, "train")
     VAL_DIR = os.path.join(DATA_DIR, "val")
     TEST_DIR = os.path.join(DATA_DIR, "test")
@@ -40,7 +40,14 @@ class Config:
             'train': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake", "train"),
             'val': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake", "val"),
             'test': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake_20k")
-        }
+        },
+        'DFDC': {
+            'name': 'DFDC',
+            'path': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake"),
+            'train': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake", "train"),
+            'val': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake", "valid"),
+            'test': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake", "test")
+        },
         # Add more datasets here in the future
         # 'dataset2': {
         #     'name': 'Another Dataset',
@@ -63,17 +70,28 @@ class Config:
     
     # ==================== TRAINING PARAMETERS ====================
     
-    # Stage 1: Feature extractor frozen
+    # Stage 1: Feature extractor frozen (train head/classifier only)
     STAGE1_EPOCHS = 5
     STAGE1_BATCH_SIZE = 32
     STAGE1_LR = 1e-4  # Higher learning rate for new layers
-    STAGE1_WEIGHT_DECAY = 0.01
+    STAGE1_WEIGHT_DECAY = 5e-4
     
-    # Stage 2: Fine-tuning high-level layers
+    # Stage 2: Fine-tuning high-level layers (Xception + head)
     STAGE2_EPOCHS = 10
     STAGE2_BATCH_SIZE = 32
     STAGE2_LR = 1e-6  # Very low learning rate for fine-tuning
-    STAGE2_WEIGHT_DECAY = 0.01
+    STAGE2_WEIGHT_DECAY = 5e-4
+    
+    # Stage 3: Fine-tuning ViT layers (for 3-stage training)
+    STAGE3_EPOCHS = 5
+    STAGE3_BATCH_SIZE = 32
+    STAGE3_LR = 1e-6  # Very low learning rate for ViT fine-tuning
+    STAGE3_WEIGHT_DECAY = 5e-4
+    
+    # Learning rates for different components (3-stage training)
+    LR_HEAD = 1e-4      # Learning rate for fusion + classifier head
+    LR_CNN = 1e-5       # Learning rate for Xception CNN
+    LR_VIT = 5e-6       # Learning rate for ViT transformer
     
     # ==================== OPTIMIZATION ====================
     OPTIMIZER = 'adamw'  # AdamW optimizer
@@ -88,7 +106,7 @@ class Config:
     
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
-    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
+    LABEL_SMOOTHING = 0.05  # Label smoothing for CrossEntropyLoss
     
     # ==================== DATA LOADING ====================
     NUM_WORKERS = 8  # Number of workers for data loading
@@ -114,7 +132,7 @@ class Config:
     # ==================== AUGMENTATION ====================
     # Data augmentation probabilities
     HORIZONTAL_FLIP_PROB = 0.5
-    ROTATION_DEGREES = 10
+    ROTATION_DEGREES = 15
     COLOR_JITTER_BRIGHTNESS = 0.2
     COLOR_JITTER_CONTRAST = 0.2
     COLOR_JITTER_SATURATION = 0.2
@@ -123,6 +141,22 @@ class Config:
     # Advanced augmentations
     USE_RANDOM_ERASING = True  # Random erasing augmentation
     RANDOM_ERASING_PROB = 0.15
+    
+    # Blur augmentation
+    USE_GAUSSIAN_BLUR = True
+    GAUSSIAN_BLUR_PROB = 0.3
+    GAUSSIAN_BLUR_KERNEL = [3, 5, 7]  # Kernel sizes
+    GAUSSIAN_BLUR_SIGMA = (0.1, 2.0)  # Sigma range
+    
+    # Noise augmentation
+    USE_GAUSSIAN_NOISE = True
+    GAUSSIAN_NOISE_PROB = 0.3
+    GAUSSIAN_NOISE_STD = (0.01, 0.05)  # Noise std range
+    
+    # Random downscale (compression artifacts simulation)
+    USE_RANDOM_DOWNSCALE = True
+    RANDOM_DOWNSCALE_PROB = 0.3
+    RANDOM_DOWNSCALE_RANGE = (0.5, 0.9)  # Scale range before upscaling back
     
     @classmethod
     def print_config(cls):
@@ -155,6 +189,17 @@ class Config:
         print(f"   Batch size: {cls.STAGE2_BATCH_SIZE}")
         print(f"   Learning rate: {cls.STAGE2_LR}")
         print(f"   Weight decay: {cls.STAGE2_WEIGHT_DECAY}")
+        
+        print("\n🎯 TRAINING - STAGE 3:")
+        print(f"   Epochs: {cls.STAGE3_EPOCHS}")
+        print(f"   Batch size: {cls.STAGE3_BATCH_SIZE}")
+        print(f"   Learning rate: {cls.STAGE3_LR}")
+        print(f"   Weight decay: {cls.STAGE3_WEIGHT_DECAY}")
+        
+        print("\n📊 COMPONENT LEARNING RATES:")
+        print(f"   Head LR: {cls.LR_HEAD}")
+        print(f"   CNN LR: {cls.LR_CNN}")
+        print(f"   ViT LR: {cls.LR_VIT}")
         
         print("\n⚡ OPTIMIZATION:")
         print(f"   Optimizer: {cls.OPTIMIZER}")
@@ -194,10 +239,18 @@ class Config:
                 'batch_size': cls.STAGE2_BATCH_SIZE,
                 'lr': cls.STAGE2_LR,
                 'weight_decay': cls.STAGE2_WEIGHT_DECAY,
-                'name': name or 'Stage 2: Fine-tuning'
+                'name': name or 'Stage 2: Xception Fine-tuning'
+            }
+        elif stage == 3:
+            return {
+                'epochs': cls.STAGE3_EPOCHS,
+                'batch_size': cls.STAGE3_BATCH_SIZE,
+                'lr': cls.STAGE3_LR,
+                'weight_decay': cls.STAGE3_WEIGHT_DECAY,
+                'name': name or 'Stage 3: ViT Fine-tuning'
             }
         else:
-            raise ValueError(f"Invalid stage: {stage}. Must be 1 or 2.")
+            raise ValueError(f"Invalid stage: {stage}. Must be 1, 2 or 3.")
     
     @classmethod
     def get_dataset_config(cls, dataset_key='default'):

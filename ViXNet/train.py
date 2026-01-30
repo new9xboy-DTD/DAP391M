@@ -571,17 +571,358 @@ def train_model(model_name="vixnet"):
     print(f"💾 Models saved in: {Config.SAVE_DIR}")
     print(f"📊 Training history saved")
     print("="*70)
+
+
+def get_optimizer_with_param_groups(model, param_groups, weight_decay):
+    """
+    Create optimizer with different parameter groups (different LRs)
     
+    Args:
+        model: Model to optimize
+        param_groups: List of parameter groups with 'params' and 'lr'
+        weight_decay: Weight decay for regularization
+        
+    Returns:
+        Optimizer
+    """
+    # Add weight decay to each group
+    for pg in param_groups:
+        pg['weight_decay'] = weight_decay
     
+    if Config.OPTIMIZER.lower() == 'adamw':
+        optimizer = optim.AdamW(param_groups, eps=1e-10)
+    elif Config.OPTIMIZER.lower() == 'sgd':
+        optimizer = optim.SGD(param_groups, momentum=Config.MOMENTUM)
+    else:
+        raise ValueError(f"Unknown optimizer: {Config.OPTIMIZER}")
+    
+    return optimizer
+
+
+def train_stage_3stage(
+    model, 
+    train_loader, 
+    val_loader, 
+    test_loader,
+    stage, 
+    stage_config,
+    start_epoch=1,
+    use_param_groups=False
+):
+    """
+    Train model for one stage (supports 3-stage training with param groups)
+    
+    Args:
+        model: Model
+        train_loader: Training data loader
+        val_loader: Validation data loader
+        test_loader: Test data loader
+        stage: Stage number (1, 2, or 3)
+        stage_config: Configuration for this stage
+        start_epoch: Starting epoch number
+        use_param_groups: Whether to use different LRs for different components
+        
+    Returns:
+        Tuple of (model, training_history)
+    """
+    print("\n" + "="*70)
+    print(f"🚀 {stage_config['name'].upper()}")
+    print("="*70)
+    print(f"   Epochs: {stage_config['epochs']}")
+    print(f"   Learning rate: {stage_config['lr']}")
+    print(f"   Batch size: {stage_config['batch_size']}")
+    print(f"   Weight decay: {stage_config['weight_decay']}")
+    print("="*70)
+    
+    class_weights = torch.tensor(Config.WEIGHT_DATASET).to(Config.DEVICE)
+    criterion = nn.CrossEntropyLoss(label_smoothing=Config.LABEL_SMOOTHING, weight=class_weights)
+    
+    # Create optimizer with or without param groups
+    if use_param_groups and hasattr(model, 'get_param_groups'):
+        print("\n📊 Using different learning rates for components...")
+        param_groups = model.get_param_groups(
+            lr_head=Config.LR_HEAD,
+            lr_cnn=Config.LR_CNN,
+            lr_vit=Config.LR_VIT
+        )
+        optimizer = get_optimizer_with_param_groups(model, param_groups, stage_config['weight_decay'])
+    else:
+        optimizer = get_optimizer(model, stage_config['lr'], stage_config['weight_decay'])
+    
+    scheduler = get_scheduler(optimizer, stage_config['epochs'], stage_config['lr'])
+    scaler = torch.amp.GradScaler() if Config.MIXED_PRECISION else None
+    
+    early_stopping = EarlyStopping(
+        patience=Config.PATIENCE,
+        min_delta=Config.MIN_DELTA,
+        mode='max'
+    )
+    
+    history = []
+    best_val_acc = 0.0
+    
+    for epoch in range(start_epoch, start_epoch + stage_config['epochs']):
+        print(f"\n{'='*70}")
+        print(f"📅 STAGE {stage} - EPOCH {epoch}/{start_epoch + stage_config['epochs'] - 1}")
+        print(f"{'='*70}")
+        
+        train_metrics = train_one_epoch(
+            model, train_loader, criterion, optimizer, scaler,
+            epoch, f"Stage {stage}"
+        )
+        
+        val_metrics = validate(
+            model, val_loader, criterion, epoch, f"Stage {stage}"
+        )
+        
+        test_metrics = None
+        if Config.TEST_AFTER_EPOCH and test_loader is not None:
+            print(f"\n🧪 Testing on test set...")
+            test_metrics = validate(
+                model, test_loader, criterion, epoch, f"Stage {stage} - Test"
+            )
+        
+        print_metrics(train_metrics, val_metrics, test_metrics, epoch)
+        
+        if scheduler is not None:
+            if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(val_metrics['loss'])
+            else:
+                scheduler.step()
+            
+            # Print LR for each param group
+            print(f"\n📈 Learning rates:")
+            for i, pg in enumerate(optimizer.param_groups):
+                name = pg.get('name', f'group_{i}')
+                print(f"   {name}: {pg['lr']:.2e}")
+        
+        history_entry = {
+            'epoch': epoch,
+            'stage': stage,
+            'train': train_metrics,
+            'val': val_metrics,
+            'lr': optimizer.param_groups[0]['lr']
+        }
+        if test_metrics:
+            history_entry['test'] = test_metrics
+        history.append(history_entry)
+        
+        is_best = val_metrics['accuracy'] > best_val_acc
+        if is_best:
+            best_val_acc = val_metrics['accuracy']
+            print(f"\n🎉 New best model! Validation accuracy: {best_val_acc:.4f}")
+        
+        if Config.SAVE_EVERY_EPOCH or is_best:
+            save_checkpoint(
+                model, optimizer, epoch, val_metrics, stage, is_best
+            )
+        
+        if early_stopping(val_metrics['accuracy']):
+            print(f"\n⚠️  Early stopping triggered after {epoch} epochs!")
+            print(f"   Best validation accuracy: {best_val_acc:.4f}")
+            break
+    
+    print(f"\n✅ {stage_config['name']} completed!")
+    print(f"🏆 Best validation accuracy: {best_val_acc:.4f}")
+    
+    return model, history
+
+
+def train_vixnet_cross_attention_3stage():
+    """
+    3-stage training for ViXNet Cross-Attention:
+    Stage 1: Train head (fusion + classifier) only
+    Stage 2: Unfreeze Xception, train with different LRs
+    Stage 3: Unfreeze ViT, train with different LRs
+    
+    Labels: Real=0, Fake=1
+    """
+    
+    print("\n" + "="*70)
+    print("🚀 VIXNET CROSS-ATTENTION 3-STAGE TRAINING")
+    print("="*70)
+    print("   📋 Label mapping: Real=0, Fake=1")
+    print("="*70)
+    
+    Config.print_config()
+    
+    dataset_available = check_dataset_availability()
+    
+    if not dataset_available:
+        print("\n⚠️  Dataset not available!")
+        return
+    
+    # Create data loaders
+    print("\n" + "="*70)
+    print("📦 PREPARING DATA LOADERS")
+    print("="*70)
+    
+    stage1_config = Config.get_stage_config(1, "Stage 1: Head Training")
+    data_loaders = create_data_loaders(batch_size=stage1_config['batch_size'])
+    
+    if data_loaders is None:
+        print("❌ Failed to create data loaders!")
+        return
+    
+    train_loader = data_loaders['train']
+    val_loader = data_loaders['val']
+    test_loader = data_loaders['test']
+    
+    # Create model
+    print("\n" + "="*70)
+    print("🏗️  INITIALIZING MODEL")
+    print("="*70)
+    
+    model = create_vixnet_cross_attention(pretrained=True, num_classes=Config.NUM_CLASSES)
+    model = model.to(Config.DEVICE)
+    
+    full_history = []
+    
+    # ==================== STAGE 1: TRAIN HEAD ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 1: TRAINING HEAD (Fusion + Classifier)")
+    print("="*70)
+    
+    model.freeze_feature_extractors()
+    
+    _, stage1_history = train_stage_3stage(
+        model, train_loader, val_loader, test_loader,
+        stage=1,
+        stage_config=stage1_config,
+        start_epoch=1,
+        use_param_groups=False
+    )
+    
+    save_training_history(stage1_history, 'stage1_history.json')
+    full_history.extend(stage1_history)
+    
+    # ==================== STAGE 2: UNFREEZE XCEPTION ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 2: FINE-TUNING XCEPTION")
+    print("="*70)
+    
+    # Load best model from Stage 1
+    best_stage1_path = os.path.join(Config.SAVE_DIR, 'best_model_stage1.pth')
+    if os.path.exists(best_stage1_path):
+        print("\n📂 Loading best model from Stage 1...")
+        load_checkpoint(model, best_stage1_path)
+    
+    model.unfreeze_xception_layers(unfreeze_ratio=0.20)
+    
+    stage2_config = Config.get_stage_config(2, "Stage 2: Xception Fine-tuning")
+    
+    if stage2_config['batch_size'] != stage1_config['batch_size']:
+        print("\n📦 Creating new data loaders for Stage 2...")
+        data_loaders = create_data_loaders(batch_size=stage2_config['batch_size'])
+        train_loader = data_loaders['train']
+        val_loader = data_loaders['val']
+        test_loader = data_loaders['test']
+    
+    start_epoch = stage1_config['epochs'] + 1
+    _, stage2_history = train_stage_3stage(
+        model, train_loader, val_loader, test_loader,
+        stage=2,
+        stage_config=stage2_config,
+        start_epoch=start_epoch,
+        use_param_groups=True
+    )
+    
+    save_training_history(stage2_history, 'stage2_history.json')
+    full_history.extend(stage2_history)
+    
+    # ==================== STAGE 3: UNFREEZE VIT ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 3: FINE-TUNING VIT")
+    print("="*70)
+    
+    # Load best model from Stage 2
+    best_stage2_path = os.path.join(Config.SAVE_DIR, 'best_model_stage2.pth')
+    if os.path.exists(best_stage2_path):
+        print("\n📂 Loading best model from Stage 2...")
+        load_checkpoint(model, best_stage2_path)
+    
+    model.unfreeze_vit_layers(num_blocks=2)
+    
+    stage3_config = Config.get_stage_config(3, "Stage 3: ViT Fine-tuning")
+    
+    if stage3_config['batch_size'] != stage2_config['batch_size']:
+        print("\n📦 Creating new data loaders for Stage 3...")
+        data_loaders = create_data_loaders(batch_size=stage3_config['batch_size'])
+        train_loader = data_loaders['train']
+        val_loader = data_loaders['val']
+        test_loader = data_loaders['test']
+    
+    start_epoch = stage1_config['epochs'] + stage2_config['epochs'] + 1
+    _, stage3_history = train_stage_3stage(
+        model, train_loader, val_loader, test_loader,
+        stage=3,
+        stage_config=stage3_config,
+        start_epoch=start_epoch,
+        use_param_groups=True
+    )
+    
+    save_training_history(stage3_history, 'stage3_history.json')
+    full_history.extend(stage3_history)
+    
+    # Save full history
+    save_training_history(full_history, 'full_training_history.json')
+    
+    # ==================== FINAL EVALUATION ====================
+    
+    print("\n" + "="*70)
+    print("🏁 FINAL EVALUATION")
+    print("="*70)
+    
+    best_model_path = os.path.join(Config.SAVE_DIR, 'best_model.pth')
+    if os.path.exists(best_model_path):
+        print("\n📂 Loading best overall model...")
+        load_checkpoint(model, best_model_path)
+        
+        print("\n🧪 Final evaluation on test set...")
+        criterion = nn.CrossEntropyLoss()
+        test_metrics = validate(model, test_loader, criterion, stage_name="Final Test")
+        
+        print("\n" + "="*70)
+        print("🏆 FINAL TEST RESULTS")
+        print("="*70)
+        print(f"   Labels: Real=0, Fake=1")
+        print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
+        print(f"   Precision: {test_metrics['precision']:.4f}")
+        print(f"   Recall: {test_metrics['recall']:.4f}")
+        print(f"   F1-Score: {test_metrics['f1']:.4f}")
+        print(f"\n   Confusion Matrix:")
+        print(f"   {test_metrics['confusion_matrix']}")
+        print("="*70)
+    
+    print("\n" + "="*70)
+    print("✅ 3-STAGE TRAINING COMPLETED!")
+    print("="*70)
+    print(f"💾 Models saved in: {Config.SAVE_DIR}")
+    print(f"📊 Training history saved")
+    print("="*70)
+
+
 if __name__ == "__main__":
     try:
-        user_input = input("Select training mode:\n1. ViXNet (default)\n2. Xception Only\n3. ViT Only\n4. ViXNet Cross-Attention\nEnter choice (1, 2, 3, or 4): ").strip()
-        if(user_input == '2'):
+        print("Select training mode:")
+        print("1. ViXNet (2-stage, default)")
+        print("2. Xception Only (2-stage)")
+        print("3. ViT Only (2-stage)")
+        print("4. ViXNet Cross-Attention (2-stage)")
+        print("5. ViXNet Cross-Attention (3-stage) ⭐")
+        user_input = input("Enter choice (1-5): ").strip()
+        
+        if user_input == '2':
             train_model(model_name="xception")
-        elif(user_input == '3'):
+        elif user_input == '3':
             train_model(model_name="vit")
-        elif(user_input == '4'):
+        elif user_input == '4':
             train_model(model_name="vixnet_cross_attention")
+        elif user_input == '5':
+            train_vixnet_cross_attention_3stage()
         else:
             train_model(model_name="vixnet")
     except KeyboardInterrupt:

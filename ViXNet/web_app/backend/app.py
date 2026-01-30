@@ -25,7 +25,7 @@ from tqdm import tqdm
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-from dataset import create_data_loaders
+from dataset import create_data_loaders, DeepfakeDataset
 from model_factory import create_model, load_model_from_checkpoint, detect_model_type
 from config import Config
 from torchvision import datasets
@@ -153,8 +153,11 @@ def create_test_loader(dataset_key='default', batch_size=32, num_workers=2):
             ),
         ])
         
-        # Create dataset
-        test_dataset = datasets.ImageFolder(test_dir, transform=test_transform)
+        # Create dataset with fixed label mapping: Real=0, Fake=1
+        # Using DeepfakeDataset instead of ImageFolder to ensure consistent mapping
+        test_dataset = DeepfakeDataset(test_dir, transform=test_transform)
+        
+        print(f"   Class mapping: {test_dataset.class_to_idx}")  # Should be {'Real': 0, 'Fake': 1}
         
         # Create data loader
         test_loader = torch.utils.data.DataLoader(
@@ -194,7 +197,7 @@ def calculate_auc_on_test_set(model, dataset_key='default', device=None):
         
         # Use larger batch size for CPU efficiency (64-128 is good for 10k samples)
         # Larger batch = fewer forward passes = faster total time
-        batch_size = 64 if str(device) == 'cpu' else Config.STAGE1_BATCH_SIZE
+        batch_size = 32 if str(device) == 'cpu' else Config.STAGE1_BATCH_SIZE
         num_workers = 0 if str(device) == 'cpu' else Config.NUM_WORKERS  # 0 workers is often faster on Windows
         
         # Load test dataset using the specified dataset_key
@@ -225,7 +228,7 @@ def calculate_auc_on_test_set(model, dataset_key='default', device=None):
                 preds = torch.argmax(probs, dim=1)
                 
                 all_labels.extend(labels.numpy())
-                all_probs.extend(probs[:, 1].cpu().numpy())  # Probability of "Real" class
+                all_probs.extend(probs[:, 1].cpu().numpy())  # Probability of "Fake" class (positive class, label=1)
                 all_preds.extend(preds.cpu().numpy())
         
         elapsed_time = time.time() - start_time
@@ -319,13 +322,14 @@ def predict():
             predicted_class = torch.argmax(probabilities, dim=1).item()
             confidence = probabilities[0][predicted_class].item()
         
-        class_names = ['Fake', 'Real']
+        # Label mapping: Real=0, Fake=1
+        class_names = ['Real', 'Fake']
         result = {
             'prediction': class_names[predicted_class],
             'confidence': float(confidence),
             'probabilities': {
-                'Fake': float(probabilities[0][0].item()),
-                'Real': float(probabilities[0][1].item())
+                'Real': float(probabilities[0][0].item()),  # Class 0
+                'Fake': float(probabilities[0][1].item())   # Class 1
             }
         }
         
