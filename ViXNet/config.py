@@ -22,10 +22,10 @@ class Config:
     DATASETS = {
         'default': {
             'name': 'Default Dataset',
-            'path': os.path.join("D:\\Repo\\DAP391m", "FaceForensics"),
-            'train': os.path.join("D:\\Repo\\DAP391m", "FaceForensics", "train"),
-            'val': os.path.join("D:\\Repo\\DAP391m", "FaceForensics", "val"),
-            'test': os.path.join("D:\\Repo\\DAP391m", "FaceForensics", "test")
+            'path': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new"),
+            'train': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new", "train"),
+            'val': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new", "val"),
+            'test': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new", "test")
         },
         'celeb': {
             'name': 'CelebDF (V2)',
@@ -72,32 +72,34 @@ class Config:
     
     # Stage 1: Feature extractor frozen (train head/classifier only)
     STAGE1_EPOCHS = 5
-    STAGE1_BATCH_SIZE = 32
-    STAGE1_LR = 1e-4  # Higher learning rate for new layers
-    STAGE1_WEIGHT_DECAY = 5e-4
+    STAGE1_BATCH_SIZE = 48  # Can go higher since only head is trained
+    STAGE1_LR = 1e-3  # High LR for fresh head layers
+    STAGE1_WEIGHT_DECAY = 1e-4
     
     # Stage 2: Fine-tuning high-level layers (Xception + head)
-    STAGE2_EPOCHS = 10
-    STAGE2_BATCH_SIZE = 32
-    STAGE2_LR = 1e-6  # Very low learning rate for fine-tuning
-    STAGE2_WEIGHT_DECAY = 5e-4
+    STAGE2_EPOCHS = 8
+    STAGE2_BATCH_SIZE = 32  # Lower for fine-tuning (more memory)
+    STAGE2_LR = 5e-5  # Lower LR for fine-tuning
+    STAGE2_WEIGHT_DECAY = 1e-4
     
     # Stage 3: Fine-tuning ViT layers (for 3-stage training)
-    STAGE3_EPOCHS = 5
-    STAGE3_BATCH_SIZE = 32
-    STAGE3_LR = 1e-6  # Very low learning rate for ViT fine-tuning
-    STAGE3_WEIGHT_DECAY = 5e-4
+    STAGE3_EPOCHS = 8
+    STAGE3_BATCH_SIZE = 16  # ViT + Xception unfrozen = more memory
+    STAGE3_LR = 2e-5  # Very low LR for ViT fine-tuning
+    STAGE3_WEIGHT_DECAY = 1e-4
     
     # Learning rates for different components (3-stage training)
-    LR_HEAD = 1e-4      # Learning rate for fusion + classifier head
-    LR_CNN = 1e-5       # Learning rate for Xception CNN
-    LR_VIT = 5e-6       # Learning rate for ViT transformer
+    # Used in stage 2 & 3 when use_param_groups=True
+    LR_HEAD = 1e-5      # Very low LR for head (already well-trained)
+    LR_CNN = 5e-5       # Moderate LR for Xception CNN
+    LR_VIT = 2e-5       # Low LR for ViT (pretrained is good)
     
     # ==================== OPTIMIZATION ====================
     OPTIMIZER = 'adamw'  # AdamW optimizer
     MOMENTUM = 0.9  # For SGD (if used)
     SCHEDULER = 'cosine'  # Learning rate scheduler: 'cosine', 'step', 'plateau'
     WEIGHT_DATASET = [1.0, 1.0]  # Class weights for imbalanced dataset
+    GRADIENT_ACCUMULATION = 2  # Accumulate gradients for effective larger batch
     
     # Scheduler parameters
     STEP_SIZE = 5  # For StepLR
@@ -106,11 +108,12 @@ class Config:
     
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
-    LABEL_SMOOTHING = 0.05  # Label smoothing for CrossEntropyLoss
+    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
     
     # ==================== DATA LOADING ====================
-    NUM_WORKERS = 8  # Number of workers for data loading
+    NUM_WORKERS = 4 # Reduced - too many can slow down on Windows
     PIN_MEMORY = True  # Pin memory for faster GPU transfer
+    SAMPLES_PER_EPOCH = None  # Use subset each epoch (None = use all)
     
     # ==================== TRAINING SETTINGS ====================
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -118,7 +121,23 @@ class Config:
     GRADIENT_CLIP = 1.0  # Gradient clipping value
     
     # ==================== CHECKPOINT & LOGGING ====================
-    SAVE_DIR = "checkpoints"  # Directory to save models
+    # Base checkpoint directory
+    CHECKPOINT_BASE_DIR = "checkpoints"
+    
+    # Model-specific checkpoint directories
+    CHECKPOINT_DIRS = {
+        'vixnet': os.path.join(CHECKPOINT_BASE_DIR, 'vixnet'),
+        'vixnet_cross_attention': os.path.join(CHECKPOINT_BASE_DIR, 'vixnet_cross_attention'),
+        'xception': os.path.join(CHECKPOINT_BASE_DIR, 'xception_only'),
+        'vit': os.path.join(CHECKPOINT_BASE_DIR, 'vit_only'),
+    }
+    
+    # Current save directory - default to vixnet_cross_attention
+    SAVE_DIR = os.path.join(CHECKPOINT_BASE_DIR, 'vixnet_cross_attention')
+    
+    # Active model name (for tracking which model is being trained)
+    ACTIVE_MODEL = None
+    
     LOG_INTERVAL = 50  # Log every N batches
     SAVE_EVERY_EPOCH = True  # Save checkpoint after every epoch
     
@@ -211,8 +230,77 @@ class Config:
         print(f"   Device: {cls.DEVICE}")
         print(f"   Num workers: {cls.NUM_WORKERS}")
         print(f"   Save dir: {cls.SAVE_DIR}")
+        print(f"   Active model: {cls.ACTIVE_MODEL}")
         
         print("="*70)
+    
+    @classmethod
+    def set_model_checkpoint_dir(cls, model_name):
+        """
+        Set the checkpoint directory based on model type.
+        
+        Args:
+            model_name: Name of the model ('vixnet', 'vixnet_cross_attention', 'xception', 'vit')
+        """
+        model_name_lower = model_name.lower()
+        
+        if model_name_lower in cls.CHECKPOINT_DIRS:
+            cls.SAVE_DIR = cls.CHECKPOINT_DIRS[model_name_lower]
+        else:
+            # Default to a new folder with the model name
+            cls.SAVE_DIR = os.path.join(cls.CHECKPOINT_BASE_DIR, model_name_lower)
+        
+        cls.ACTIVE_MODEL = model_name_lower
+        
+        # Create directory if it doesn't exist
+        os.makedirs(cls.SAVE_DIR, exist_ok=True)
+        
+        print(f"\n📁 Checkpoint directory set to: {cls.SAVE_DIR}")
+        return cls.SAVE_DIR
+    
+    @classmethod
+    def get_checkpoint_dir(cls, model_name=None):
+        """
+        Get the checkpoint directory for a specific model.
+        
+        Args:
+            model_name: Name of the model. If None, returns current SAVE_DIR.
+            
+        Returns:
+            Path to checkpoint directory
+        """
+        if model_name is None:
+            return cls.SAVE_DIR
+        
+        model_name_lower = model_name.lower()
+        if model_name_lower in cls.CHECKPOINT_DIRS:
+            return cls.CHECKPOINT_DIRS[model_name_lower]
+        return os.path.join(cls.CHECKPOINT_BASE_DIR, model_name_lower)
+    
+    @classmethod
+    def list_model_checkpoints(cls):
+        """
+        List all available model checkpoint directories and their contents.
+        
+        Returns:
+            Dictionary with model names and their checkpoint info
+        """
+        result = {}
+        for model_name, checkpoint_dir in cls.CHECKPOINT_DIRS.items():
+            if os.path.exists(checkpoint_dir):
+                files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.pth')]
+                result[model_name] = {
+                    'path': checkpoint_dir,
+                    'checkpoints': files,
+                    'count': len(files)
+                }
+            else:
+                result[model_name] = {
+                    'path': checkpoint_dir,
+                    'checkpoints': [],
+                    'count': 0
+                }
+        return result
     
     @classmethod
     def get_stage_config(cls, stage=1, name=None):

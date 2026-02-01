@@ -228,6 +228,9 @@ def train_vixnet():
     print("🚀 VIXNET TRAINING")
     print("="*70)
     
+    # Set model-specific checkpoint directory
+    Config.set_model_checkpoint_dir('vixnet')
+    
     # Print configuration
     Config.print_config()
     
@@ -411,14 +414,17 @@ def train_model(model_name="vixnet"):
     """
     Main training function implementing 2-stage training strategy
     Args:
-        model_name: Name of the model to train ("vixnet", "xception", or "vit")
+        model_name: Name of the model to train ("vixnet", "xception", "vit", or "vixnet_cross_attention")
     """
 
     print("\n" + "="*70)
-    print("TRAINING")
+    print(f"TRAINING: {model_name.upper()}")
     print("="*70)
     
-    #print config
+    # Set model-specific checkpoint directory
+    Config.set_model_checkpoint_dir(model_name)
+    
+    # Print config
     Config.print_config()
     
     #check dataset availability
@@ -744,6 +750,9 @@ def train_vixnet_cross_attention_3stage():
     print("   📋 Label mapping: Real=0, Fake=1")
     print("="*70)
     
+    # Set model-specific checkpoint directory
+    Config.set_model_checkpoint_dir('vixnet_cross_attention')
+    
     Config.print_config()
     
     dataset_available = check_dataset_availability()
@@ -905,6 +914,628 @@ def train_vixnet_cross_attention_3stage():
     print("="*70)
 
 
+def resume_training_vixnet_cross_attention(checkpoint_path=None, resume_stage=None, resume_epoch=None):
+    """
+    Resume training for ViXNet Cross-Attention from a checkpoint.
+    
+    IMPORTANT: This function properly handles:
+    1. Loading model weights from checkpoint
+    2. Setting correct freeze/unfreeze state based on stage
+    3. NOT loading optimizer state (fresh optimizer for stability)
+    4. Proper stage transitions
+    
+    Args:
+        checkpoint_path: Path to checkpoint file. If None, will auto-detect latest checkpoint.
+        resume_stage: Stage to resume from (1, 2, or 3). If None, will auto-detect from checkpoint.
+        resume_epoch: Epoch to start from. If None, will auto-detect from checkpoint.
+    
+    Labels: Real=0, Fake=1
+    """
+    
+    print("\n" + "="*70)
+    print("🔄 RESUME TRAINING - VIXNET CROSS-ATTENTION")
+    print("="*70)
+    print("   📋 Label mapping: Real=0, Fake=1")
+    print("="*70)
+    
+    # Set model-specific checkpoint directory
+    Config.set_model_checkpoint_dir('vixnet_cross_attention')
+    
+    Config.print_config()
+    
+    # Auto-detect checkpoint if not provided
+    if checkpoint_path is None:
+        checkpoint_path = find_latest_checkpoint()
+        if checkpoint_path is None:
+            print("\n❌ No checkpoint found! Please provide a checkpoint path or train from scratch.")
+            return
+    
+    if not os.path.exists(checkpoint_path):
+        print(f"\n❌ Checkpoint not found: {checkpoint_path}")
+        return
+    
+    # Load checkpoint to get info
+    print(f"\n📂 Loading checkpoint: {checkpoint_path}")
+    checkpoint = torch.load(checkpoint_path, map_location=Config.DEVICE, weights_only=False)
+    
+    checkpoint_epoch = checkpoint.get('epoch', 0)
+    checkpoint_stage = checkpoint.get('stage', 1)
+    checkpoint_metrics = checkpoint.get('metrics', {})
+    
+    print(f"\n📊 Checkpoint Info:")
+    print(f"   Stage: {checkpoint_stage}")
+    print(f"   Epoch: {checkpoint_epoch}")
+    print(f"   Validation Accuracy: {checkpoint_metrics.get('accuracy', 'N/A')}")
+    
+    # Determine resume point
+    if resume_stage is None:
+        resume_stage = checkpoint_stage
+    if resume_epoch is None:
+        resume_epoch = checkpoint_epoch + 1
+    
+    print(f"\n🎯 Resume Point:")
+    print(f"   Starting from Stage: {resume_stage}")
+    print(f"   Starting from Epoch: {resume_epoch}")
+    
+    # Check dataset
+    dataset_available = check_dataset_availability()
+    if not dataset_available:
+        print("\n⚠️  Dataset not available!")
+        return
+    
+    # Create model - use pretrained=False since we're loading weights
+    print("\n" + "="*70)
+    print("🏗️  INITIALIZING MODEL")
+    print("="*70)
+    
+    model = create_vixnet_cross_attention(pretrained=False, num_classes=Config.NUM_CLASSES)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model = model.to(Config.DEVICE)
+    
+    print("✅ Model weights loaded successfully from checkpoint!")
+    
+    # IMPORTANT: Set correct freeze/unfreeze state based on resume stage
+    # This ensures the model has the same trainable parameters as when it was saved
+    print(f"\n🔧 Setting model state for Stage {resume_stage}...")
+    
+    if resume_stage == 1:
+        # Stage 1: Only head is trainable
+        model.freeze_feature_extractors()
+        print("   ✅ Feature extractors frozen (Stage 1 mode)")
+    elif resume_stage == 2:
+        # Stage 2: Head + Xception high-level layers trainable
+        model.freeze_feature_extractors()  # First freeze all
+        model.unfreeze_xception_layers(unfreeze_ratio=0.20)  # Then unfreeze Xception
+        print("   ✅ Xception layers unfrozen (Stage 2 mode)")
+    elif resume_stage == 3:
+        # Stage 3: Head + Xception + ViT high-level layers trainable
+        model.freeze_feature_extractors()  # First freeze all
+        model.unfreeze_xception_layers(unfreeze_ratio=0.20)  # Unfreeze Xception
+        model.unfreeze_vit_layers(num_blocks=2)  # Unfreeze ViT
+        print("   ✅ Xception and ViT layers unfrozen (Stage 3 mode)")
+    
+    # Print trainable parameters count
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"   📊 Trainable params: {trainable_params:,} / {total_params:,} ({100*trainable_params/total_params:.2f}%)")
+    
+    # Get stage configs
+    stage1_config = Config.get_stage_config(1, "Stage 1: Head Training")
+    stage2_config = Config.get_stage_config(2, "Stage 2: Xception Fine-tuning")
+    stage3_config = Config.get_stage_config(3, "Stage 3: ViT Fine-tuning")
+    
+    # Calculate epoch ranges for each stage
+    stage1_end = stage1_config['epochs']
+    stage2_end = stage1_end + stage2_config['epochs']
+    stage3_end = stage2_end + stage3_config['epochs']
+    
+    full_history = []
+    
+    # Load existing history if available
+    full_history_path = os.path.join(Config.SAVE_DIR, 'full_training_history.json')
+    if os.path.exists(full_history_path):
+        try:
+            with open(full_history_path, 'r') as f:
+                full_history = json.load(f)
+            print(f"\n📜 Loaded existing training history with {len(full_history)} entries")
+        except Exception as e:
+            print(f"\n⚠️  Could not load training history: {e}")
+            full_history = []
+    
+    # ==================== RESUME FROM APPROPRIATE STAGE ====================
+    # NOTE: Model freeze/unfreeze state has already been set above based on resume_stage
+    # We DON'T call freeze/unfreeze again in each stage block to avoid messing up the state
+    
+    if resume_stage == 1:
+        # Resume Stage 1
+        if resume_epoch <= stage1_end:
+            print("\n" + "="*70)
+            print("🎯 RESUMING STAGE 1: TRAINING HEAD (Fusion + Classifier)")
+            print("="*70)
+            
+            # Create data loaders
+            data_loaders = create_data_loaders(batch_size=stage1_config['batch_size'])
+            if data_loaders is None:
+                print("❌ Failed to create data loaders!")
+                return
+            train_loader, val_loader, test_loader = data_loaders['train'], data_loaders['val'], data_loaders['test']
+            
+            # NOTE: freeze_feature_extractors() already called above
+            
+            # Calculate remaining epochs
+            remaining_epochs = stage1_end - resume_epoch + 1
+            stage1_resume_config = stage1_config.copy()
+            stage1_resume_config['epochs'] = remaining_epochs
+            
+            _, stage1_history = train_stage_3stage(
+                model, train_loader, val_loader, test_loader,
+                stage=1,
+                stage_config=stage1_resume_config,
+                start_epoch=resume_epoch,
+                use_param_groups=False
+            )
+            
+            save_training_history(stage1_history, 'stage1_history_resumed.json')
+            full_history.extend(stage1_history)
+            
+            # Prepare for Stage 2: load best model and change freeze state
+            best_stage1_path = os.path.join(Config.SAVE_DIR, 'best_model_stage1.pth')
+            if os.path.exists(best_stage1_path):
+                print("\n📂 Loading best model from Stage 1 for Stage 2...")
+                load_checkpoint(model, best_stage1_path)
+                model.freeze_feature_extractors()
+                model.unfreeze_xception_layers(unfreeze_ratio=0.20)
+            
+            # Continue to Stage 2
+            resume_stage = 2
+            resume_epoch = stage1_end + 1
+    
+    if resume_stage == 2:
+        # Resume Stage 2
+        if resume_epoch <= stage2_end:
+            print("\n" + "="*70)
+            print("🎯 RESUMING STAGE 2: FINE-TUNING XCEPTION")
+            print("="*70)
+            
+            # NOTE: If we jumped here from stage 1 completion above, model is already prepared
+            # If we started directly at stage 2 (from user input), freeze state was set at the top
+            
+            # Create data loaders
+            data_loaders = create_data_loaders(batch_size=stage2_config['batch_size'])
+            if data_loaders is None:
+                print("❌ Failed to create data loaders!")
+                return
+            train_loader, val_loader, test_loader = data_loaders['train'], data_loaders['val'], data_loaders['test']
+            
+            # NOTE: unfreeze state already set at the top of function
+            
+            # Calculate remaining epochs
+            remaining_epochs = stage2_end - resume_epoch + 1
+            stage2_resume_config = stage2_config.copy()
+            stage2_resume_config['epochs'] = remaining_epochs
+            
+            _, stage2_history = train_stage_3stage(
+                model, train_loader, val_loader, test_loader,
+                stage=2,
+                stage_config=stage2_resume_config,
+                start_epoch=resume_epoch,
+                use_param_groups=True
+            )
+            
+            save_training_history(stage2_history, 'stage2_history_resumed.json')
+            full_history.extend(stage2_history)
+            
+            # Prepare for Stage 3: load best model and change freeze state
+            best_stage2_path = os.path.join(Config.SAVE_DIR, 'best_model_stage2.pth')
+            if os.path.exists(best_stage2_path):
+                print("\n📂 Loading best model from Stage 2 for Stage 3...")
+                load_checkpoint(model, best_stage2_path)
+                model.freeze_feature_extractors()
+                model.unfreeze_xception_layers(unfreeze_ratio=0.20)
+                model.unfreeze_vit_layers(num_blocks=2)
+            
+            # Continue to Stage 3
+            resume_stage = 3
+            resume_epoch = stage2_end + 1
+    
+    if resume_stage == 3:
+        # Resume Stage 3
+        if resume_epoch <= stage3_end:
+            print("\n" + "="*70)
+            print("🎯 RESUMING STAGE 3: FINE-TUNING VIT")
+            print("="*70)
+            
+            # NOTE: If we jumped here from stage 2 completion above, model is already prepared
+            # If we started directly at stage 3 (from user input), freeze state was set at the top
+            
+            # Create data loaders
+            data_loaders = create_data_loaders(batch_size=stage3_config['batch_size'])
+            if data_loaders is None:
+                print("❌ Failed to create data loaders!")
+                return
+            train_loader, val_loader, test_loader = data_loaders['train'], data_loaders['val'], data_loaders['test']
+            
+            # NOTE: unfreeze state already set at the top of function
+            
+            # Calculate remaining epochs  
+            remaining_epochs = stage3_end - resume_epoch + 1
+            stage3_resume_config = stage3_config.copy()
+            stage3_resume_config['epochs'] = remaining_epochs
+            
+            _, stage3_history = train_stage_3stage(
+                model, train_loader, val_loader, test_loader,
+                stage=3,
+                stage_config=stage3_resume_config,
+                start_epoch=resume_epoch,
+                use_param_groups=True
+            )
+            
+            save_training_history(stage3_history, 'stage3_history_resumed.json')
+            full_history.extend(stage3_history)
+    
+    # Save full history
+    save_training_history(full_history, 'full_training_history.json')
+    
+    # ==================== FINAL EVALUATION ====================
+    
+    print("\n" + "="*70)
+    print("🏁 FINAL EVALUATION")
+    print("="*70)
+    
+    # Create test loader if not exists
+    if 'test_loader' not in dir():
+        data_loaders = create_data_loaders(batch_size=stage3_config['batch_size'])
+        test_loader = data_loaders['test']
+    
+    best_model_path = os.path.join(Config.SAVE_DIR, 'best_model.pth')
+    if os.path.exists(best_model_path):
+        print("\n📂 Loading best overall model...")
+        load_checkpoint(model, best_model_path)
+        
+        print("\n🧪 Final evaluation on test set...")
+        criterion = nn.CrossEntropyLoss()
+        test_metrics = validate(model, test_loader, criterion, stage_name="Final Test")
+        
+        print("\n" + "="*70)
+        print("🏆 FINAL TEST RESULTS")
+        print("="*70)
+        print(f"   Labels: Real=0, Fake=1")
+        print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
+        print(f"   Precision: {test_metrics['precision']:.4f}")
+        print(f"   Recall: {test_metrics['recall']:.4f}")
+        print(f"   F1-Score: {test_metrics['f1']:.4f}")
+        print(f"\n   Confusion Matrix:")
+        print(f"   {test_metrics['confusion_matrix']}")
+        print("="*70)
+    
+    print("\n" + "="*70)
+    print("✅ RESUME TRAINING COMPLETED!")
+    print("="*70)
+    print(f"💾 Models saved in: {Config.SAVE_DIR}")
+    print(f"📊 Training history saved")
+    print("="*70)
+
+
+def find_latest_checkpoint():
+    """
+    Find the latest checkpoint file in the checkpoint directory.
+    
+    Returns:
+        Path to the latest checkpoint or None if no checkpoint found.
+    """
+    if not os.path.exists(Config.SAVE_DIR):
+        return None
+    
+    checkpoints = []
+    for filename in os.listdir(Config.SAVE_DIR):
+        if filename.startswith('checkpoint_stage') and filename.endswith('.pth'):
+            filepath = os.path.join(Config.SAVE_DIR, filename)
+            # Extract stage and epoch from filename
+            try:
+                parts = filename.replace('.pth', '').split('_')
+                stage = int(parts[1].replace('stage', ''))
+                epoch = int(parts[2].replace('epoch', ''))
+                checkpoints.append((filepath, stage, epoch))
+            except (IndexError, ValueError):
+                continue
+    
+    if not checkpoints:
+        # Try to find best_model.pth or any .pth file
+        for filename in ['best_model_stage3.pth', 'best_model_stage2.pth', 'best_model_stage1.pth', 'best_model.pth']:
+            filepath = os.path.join(Config.SAVE_DIR, filename)
+            if os.path.exists(filepath):
+                return filepath
+        return None
+    
+    # Sort by stage then epoch and return latest
+    checkpoints.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    return checkpoints[0][0]
+
+
+def list_available_checkpoints():
+    """
+    List all available checkpoints with their info.
+    
+    Returns:
+        List of checkpoint info dictionaries.
+    """
+    if not os.path.exists(Config.SAVE_DIR):
+        return []
+    
+    checkpoints = []
+    for filename in os.listdir(Config.SAVE_DIR):
+        if filename.endswith('.pth'):
+            filepath = os.path.join(Config.SAVE_DIR, filename)
+            try:
+                checkpoint = torch.load(filepath, map_location='cpu', weights_only=False)
+                info = {
+                    'filename': filename,
+                    'path': filepath,
+                    'epoch': checkpoint.get('epoch', 'N/A'),
+                    'stage': checkpoint.get('stage', 'N/A'),
+                    'accuracy': checkpoint.get('metrics', {}).get('accuracy', 'N/A'),
+                    'timestamp': checkpoint.get('timestamp', 'N/A')
+                }
+                checkpoints.append(info)
+            except Exception as e:
+                print(f"⚠️  Could not load {filename}: {e}")
+                continue
+    
+    return checkpoints
+
+
+def interactive_resume_training():
+    """
+    Interactive interface for resuming training.
+    """
+    print("\n" + "="*70)
+    print("🔄 RESUME TRAINING - INTERACTIVE MODE")
+    print("="*70)
+    
+    # List available checkpoints
+    checkpoints = list_available_checkpoints()
+    
+    if not checkpoints:
+        print("\n❌ No checkpoints found!")
+        print(f"   Checkpoint directory: {Config.SAVE_DIR}")
+        return
+    
+    print(f"\n📁 Found {len(checkpoints)} checkpoint(s):")
+    print("-" * 70)
+    
+    for i, ckpt in enumerate(checkpoints):
+        acc_str = f"{ckpt['accuracy']:.4f}" if isinstance(ckpt['accuracy'], float) else ckpt['accuracy']
+        print(f"   {i+1}. {ckpt['filename']}")
+        print(f"      Stage: {ckpt['stage']}, Epoch: {ckpt['epoch']}, Accuracy: {acc_str}")
+        print(f"      Timestamp: {ckpt['timestamp']}")
+    
+    print("-" * 70)
+    print("   0. Auto-detect latest checkpoint")
+    print("-" * 70)
+    
+    try:
+        choice = input("\nSelect checkpoint (0 for auto): ").strip()
+        
+        if choice == '0' or choice == '':
+            checkpoint_path = None
+            print("\n🔍 Auto-detecting latest checkpoint...")
+        else:
+            idx = int(choice) - 1
+            if 0 <= idx < len(checkpoints):
+                checkpoint_path = checkpoints[idx]['path']
+            else:
+                print("\n❌ Invalid choice!")
+                return
+        
+        # Ask for resume options
+        print("\n📋 Resume Options:")
+        print("   1. Continue from checkpoint (auto-detect stage/epoch)")
+        print("   2. Specify stage and epoch manually")
+        
+        option = input("\nSelect option (1-2): ").strip()
+        
+        if option == '2':
+            stage_input = input("Enter stage (1-3): ").strip()
+            epoch_input = input("Enter epoch: ").strip()
+            resume_stage = int(stage_input) if stage_input else None
+            resume_epoch = int(epoch_input) if epoch_input else None
+        else:
+            resume_stage = None
+            resume_epoch = None
+        
+        # Start resume training
+        resume_training_vixnet_cross_attention(
+            checkpoint_path=checkpoint_path,
+            resume_stage=resume_stage,
+            resume_epoch=resume_epoch
+        )
+        
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Cancelled by user!")
+    except ValueError as e:
+        print(f"\n❌ Invalid input: {e}")
+
+
+def train_vixnet_3stage():
+    """
+    3-stage training for ViXNet (concatenation fusion):
+    Stage 1: Train head (fusion + classifier) only
+    Stage 2: Unfreeze Xception, train with different LRs
+    Stage 3: Unfreeze ViT, train with different LRs
+    
+    Labels: Real=0, Fake=1
+    """
+    
+    print("\n" + "="*70)
+    print("🚀 VIXNET 3-STAGE TRAINING")
+    print("="*70)
+    print("   📋 Label mapping: Real=0, Fake=1")
+    print("="*70)
+    
+    # Set model-specific checkpoint directory
+    Config.set_model_checkpoint_dir('vixnet')
+    
+    Config.print_config()
+    
+    dataset_available = check_dataset_availability()
+    
+    if not dataset_available:
+        print("\n⚠️  Dataset not available!")
+        return
+    
+    # Create data loaders
+    print("\n" + "="*70)
+    print("📦 PREPARING DATA LOADERS")
+    print("="*70)
+    
+    stage1_config = Config.get_stage_config(1, "Stage 1: Head Training")
+    data_loaders = create_data_loaders(batch_size=stage1_config['batch_size'])
+    
+    if data_loaders is None:
+        print("❌ Failed to create data loaders!")
+        return
+    
+    train_loader = data_loaders['train']
+    val_loader = data_loaders['val']
+    test_loader = data_loaders['test']
+    
+    # Create model
+    print("\n" + "="*70)
+    print("🏗️  INITIALIZING MODEL")
+    print("="*70)
+    
+    model = create_vixnet(pretrained=True, num_classes=Config.NUM_CLASSES)
+    model = model.to(Config.DEVICE)
+    
+    full_history = []
+    
+    # ==================== STAGE 1: TRAIN HEAD ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 1: TRAINING HEAD (Fusion + Classifier)")
+    print("="*70)
+    
+    model.freeze_feature_extractors()
+    
+    _, stage1_history = train_stage_3stage(
+        model, train_loader, val_loader, test_loader,
+        stage=1,
+        stage_config=stage1_config,
+        start_epoch=1,
+        use_param_groups=False
+    )
+    
+    save_training_history(stage1_history, 'stage1_history.json')
+    full_history.extend(stage1_history)
+    
+    # ==================== STAGE 2: UNFREEZE XCEPTION ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 2: FINE-TUNING XCEPTION")
+    print("="*70)
+    
+    # Load best model from Stage 1
+    best_stage1_path = os.path.join(Config.SAVE_DIR, 'best_model_stage1.pth')
+    if os.path.exists(best_stage1_path):
+        print("\n📂 Loading best model from Stage 1...")
+        load_checkpoint(model, best_stage1_path)
+    
+    model.unfreeze_xception_layers(unfreeze_ratio=0.20)
+    
+    stage2_config = Config.get_stage_config(2, "Stage 2: Xception Fine-tuning")
+    
+    if stage2_config['batch_size'] != stage1_config['batch_size']:
+        print("\n📦 Creating new data loaders for Stage 2...")
+        data_loaders = create_data_loaders(batch_size=stage2_config['batch_size'])
+        train_loader = data_loaders['train']
+        val_loader = data_loaders['val']
+        test_loader = data_loaders['test']
+    
+    start_epoch = stage1_config['epochs'] + 1
+    _, stage2_history = train_stage_3stage(
+        model, train_loader, val_loader, test_loader,
+        stage=2,
+        stage_config=stage2_config,
+        start_epoch=start_epoch,
+        use_param_groups=True
+    )
+    
+    save_training_history(stage2_history, 'stage2_history.json')
+    full_history.extend(stage2_history)
+    
+    # ==================== STAGE 3: UNFREEZE VIT ====================
+    
+    print("\n" + "="*70)
+    print("🎯 STAGE 3: FINE-TUNING VIT")
+    print("="*70)
+    
+    # Load best model from Stage 2
+    best_stage2_path = os.path.join(Config.SAVE_DIR, 'best_model_stage2.pth')
+    if os.path.exists(best_stage2_path):
+        print("\n📂 Loading best model from Stage 2...")
+        load_checkpoint(model, best_stage2_path)
+    
+    model.unfreeze_vit_layers(num_blocks=2)
+    
+    stage3_config = Config.get_stage_config(3, "Stage 3: ViT Fine-tuning")
+    
+    if stage3_config['batch_size'] != stage2_config['batch_size']:
+        print("\n📦 Creating new data loaders for Stage 3...")
+        data_loaders = create_data_loaders(batch_size=stage3_config['batch_size'])
+        train_loader = data_loaders['train']
+        val_loader = data_loaders['val']
+        test_loader = data_loaders['test']
+    
+    start_epoch = stage1_config['epochs'] + stage2_config['epochs'] + 1
+    _, stage3_history = train_stage_3stage(
+        model, train_loader, val_loader, test_loader,
+        stage=3,
+        stage_config=stage3_config,
+        start_epoch=start_epoch,
+        use_param_groups=True
+    )
+    
+    save_training_history(stage3_history, 'stage3_history.json')
+    full_history.extend(stage3_history)
+    
+    # Save full history
+    save_training_history(full_history, 'full_training_history.json')
+    
+    # ==================== FINAL EVALUATION ====================
+    
+    print("\n" + "="*70)
+    print("🏁 FINAL EVALUATION")
+    print("="*70)
+    
+    best_model_path = os.path.join(Config.SAVE_DIR, 'best_model.pth')
+    if os.path.exists(best_model_path):
+        print("\n📂 Loading best overall model...")
+        load_checkpoint(model, best_model_path)
+        
+        print("\n🧪 Final evaluation on test set...")
+        criterion = nn.CrossEntropyLoss()
+        test_metrics = validate(model, test_loader, criterion, stage_name="Final Test")
+        
+        print("\n" + "="*70)
+        print("🏆 FINAL TEST RESULTS")
+        print("="*70)
+        print(f"   Labels: Real=0, Fake=1")
+        print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
+        print(f"   Precision: {test_metrics['precision']:.4f}")
+        print(f"   Recall: {test_metrics['recall']:.4f}")
+        print(f"   F1-Score: {test_metrics['f1']:.4f}")
+        print(f"\n   Confusion Matrix:")
+        print(f"   {test_metrics['confusion_matrix']}")
+        print("="*70)
+    
+    print("\n" + "="*70)
+    print("✅ VIXNET 3-STAGE TRAINING COMPLETED!")
+    print("="*70)
+    print(f"💾 Models saved in: {Config.SAVE_DIR}")
+    print(f"📊 Training history saved")
+    print("="*70)
+
+
 if __name__ == "__main__":
     try:
         print("Select training mode:")
@@ -913,7 +1544,9 @@ if __name__ == "__main__":
         print("3. ViT Only (2-stage)")
         print("4. ViXNet Cross-Attention (2-stage)")
         print("5. ViXNet Cross-Attention (3-stage) ⭐")
-        user_input = input("Enter choice (1-5): ").strip()
+        print("6. ViXNet (3-stage) ⭐")
+        print("7. Resume Training - ViXNet Cross-Attention 🔄")
+        user_input = input("Enter choice (1-7): ").strip()
         
         if user_input == '2':
             train_model(model_name="xception")
@@ -923,6 +1556,10 @@ if __name__ == "__main__":
             train_model(model_name="vixnet_cross_attention")
         elif user_input == '5':
             train_vixnet_cross_attention_3stage()
+        elif user_input == '6':
+            train_vixnet_3stage()
+        elif user_input == '7':
+            interactive_resume_training()
         else:
             train_model(model_name="vixnet")
     except KeyboardInterrupt:

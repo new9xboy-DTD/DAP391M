@@ -230,17 +230,19 @@ def get_data_transforms(stage='train'):
         ])
 
 
-def create_data_loaders(batch_size=None, num_workers=None):
+def create_data_loaders(batch_size=None, num_workers=None, samples_per_epoch=None):
     """
     Create DataLoaders for train, validation, and test sets
     
     Args:
         batch_size: Batch size (uses Config.STAGE1_BATCH_SIZE if None)
         num_workers: Number of workers (uses Config.NUM_WORKERS if None)
+        samples_per_epoch: Number of samples per epoch (None = use all, uses Config.SAMPLES_PER_EPOCH)
         
     Returns:
         Dictionary containing train_loader, val_loader, test_loader, and class_names
     """
+    from torch.utils.data import RandomSampler
     
     if batch_size is None:
         batch_size = Config.STAGE1_BATCH_SIZE
@@ -248,9 +250,14 @@ def create_data_loaders(batch_size=None, num_workers=None):
     if num_workers is None:
         num_workers = Config.NUM_WORKERS
     
+    if samples_per_epoch is None:
+        samples_per_epoch = getattr(Config, 'SAMPLES_PER_EPOCH', None)
+    
     print(f"\n📂 Loading datasets...")
     print(f"   Batch size: {batch_size}")
     print(f"   Num workers: {num_workers}")
+    if samples_per_epoch:
+        print(f"   Samples per epoch: {samples_per_epoch:,}")
     
     # Check if dataset directories exist
     if not os.path.exists(Config.TRAIN_DIR):
@@ -294,14 +301,28 @@ def create_data_loaders(batch_size=None, num_workers=None):
         print("   Please ensure dataset is available at the specified paths.")
         return None
     
+    # Create sampler for subset training (faster epochs)
+    train_sampler = None
+    shuffle_train = True
+    if samples_per_epoch and samples_per_epoch < len(train_dataset):
+        train_sampler = RandomSampler(
+            train_dataset, 
+            replacement=True, 
+            num_samples=samples_per_epoch
+        )
+        shuffle_train = False  # Sampler handles randomization
+        print(f"   🚀 Using RandomSampler: {samples_per_epoch:,} samples/epoch (faster training)")
+    
     # Create data loaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=shuffle_train,
+        sampler=train_sampler,
         num_workers=num_workers,
         pin_memory=Config.PIN_MEMORY,
-        drop_last=True  # Drop incomplete batches for batch normalization
+        drop_last=True,  # Drop incomplete batches for batch normalization
+        persistent_workers=num_workers > 0  # Keep workers alive between epochs
     )
     
     val_loader = DataLoader(

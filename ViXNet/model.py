@@ -387,10 +387,47 @@ class ViXNet(nn.Module):
             param.requires_grad = False
             
         print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+
+    def unfreeze_xception_layers(self, unfreeze_ratio=0.15):
+        """
+        Unfreeze Xception layers for Stage 2 fine-tuning (3-stage training)
+        - Xception: last `unfreeze_ratio` layers
+        - ViT: remains frozen
+        """
+        print("🔓 Unfreezing Xception layers (Stage 2)...")
+
+        xception_modules = list(self.xception_branch.xception.named_children())
+        num_to_unfreeze = max(1, int(unfreeze_ratio * len(xception_modules)))
+        
+        for name, module in xception_modules[-num_to_unfreeze:]:
+            for param in module.parameters():
+                param.requires_grad = True
+        
+        print(f"   Unfrozen {num_to_unfreeze} Xception modules")
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
+
+    def unfreeze_vit_layers(self, num_blocks=2):
+        """
+        Unfreeze ViT layers for Stage 3 fine-tuning (3-stage training)
+        - ViT: last `num_blocks` transformer encoder blocks
+        """
+        print("🔓 Unfreezing ViT layers (Stage 3)...")
+
+        if hasattr(self.vit_branch.vit, 'blocks'):
+            vit_blocks = self.vit_branch.vit.blocks
+            num_blocks_to_unfreeze = min(num_blocks, len(vit_blocks))
+            for block in vit_blocks[-num_blocks_to_unfreeze:]:
+                for param in block.parameters():
+                    param.requires_grad = True
+            print(f"   Unfrozen last {num_blocks_to_unfreeze} ViT blocks")
+        else:
+            print("   Warning: ViT blocks not found")
+
+        print(f"   Trainable parameters: {sum(p.numel() for p in self.parameters() if p.requires_grad):,}")
         
     def unfreeze_high_level_layers(self):
         """
-        Unfreeze high-level layers for Stage 2 fine-tuning
+        Unfreeze high-level layers for Stage 2 fine-tuning (legacy 2-stage training)
         - Xception: 15% last layers
         - ViT: last 2 transformer encoder blocks
         """
@@ -426,6 +463,43 @@ class ViXNet(nn.Module):
             List of trainable parameters
         """
         return [p for p in self.parameters() if p.requires_grad]
+    
+    def get_param_groups(self, lr_head=1e-4, lr_cnn=1e-5, lr_vit=1e-6):
+        """
+        Get parameter groups with different learning rates for 3-stage training
+        
+        Args:
+            lr_head: Learning rate for fusion + classifier head
+            lr_cnn: Learning rate for Xception CNN
+            lr_vit: Learning rate for ViT transformer
+            
+        Returns:
+            List of parameter groups for optimizer
+        """
+        # Head parameters (fusion + classifier)
+        head_params = list(self.fusion.parameters()) + list(self.classifier.parameters())
+        
+        # CNN parameters (Xception)
+        cnn_params = [p for p in self.xception_branch.parameters() if p.requires_grad]
+        
+        # ViT parameters
+        vit_params = [p for p in self.vit_branch.parameters() if p.requires_grad]
+        
+        param_groups = []
+        
+        if head_params:
+            param_groups.append({'params': head_params, 'lr': lr_head, 'name': 'head'})
+        if cnn_params:
+            param_groups.append({'params': cnn_params, 'lr': lr_cnn, 'name': 'cnn'})
+        if vit_params:
+            param_groups.append({'params': vit_params, 'lr': lr_vit, 'name': 'vit'})
+        
+        print(f"   Parameter groups:")
+        for pg in param_groups:
+            num_params = sum(p.numel() for p in pg['params'])
+            print(f"     - {pg['name']}: {num_params:,} params, lr={pg['lr']:.2e}")
+        
+        return param_groups
 
 
 class ViXNetCrossAttention(nn.Module):
