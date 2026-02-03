@@ -68,10 +68,9 @@ class RandomDownscale(nn.Module):
             scale = random.uniform(*self.scale_range)
             new_size = (int(original_size[0] * scale), int(original_size[1] * scale))
             
-            # Downscale
-            img = img.resize(new_size, Image.BILINEAR)
-            # Upscale back to original
-            img = img.resize(original_size, Image.BILINEAR)
+            # Downscale then upscale back (use LANCZOS for better quality)
+            img = img.resize(new_size, Image.Resampling.BILINEAR)
+            img = img.resize(original_size, Image.Resampling.BILINEAR)
             
             if was_tensor:
                 img = F.to_tensor(img)
@@ -111,6 +110,175 @@ class RandomGaussianBlur(nn.Module):
         return f"{self.__class__.__name__}(kernel_sizes={self.kernel_sizes}, sigma={self.sigma}, p={self.p})"
 
 
+class RandomJPEGCompression(nn.Module):
+    """
+    Apply random JPEG compression to simulate real-world compression artifacts.
+    
+    This is CRITICAL for cross-dataset generalization because:
+    - Different datasets use different compression levels
+    - FF++ uses specific compression, Celeb-DF uses different compression
+    - Real-world images have varying JPEG quality
+    
+    Works on PIL Images (before ToTensor).
+    """
+    def __init__(self, quality_range=(30, 100), p=0.8):
+        """
+        Args:
+            quality_range: Tuple of (min_quality, max_quality) for JPEG compression.
+                          Lower quality = more compression artifacts.
+                          Recommended: (30, 100) for strong augmentation.
+            p: Probability of applying compression.
+        """
+        super().__init__()
+        self.quality_range = quality_range
+        self.p = p
+    
+    def forward(self, img):
+        if random.random() < self.p:
+            # Handle tensor input
+            if isinstance(img, torch.Tensor):
+                img = F.to_pil_image(img)
+                was_tensor = True
+            else:
+                was_tensor = False
+            
+            # Random quality in range
+            quality = random.randint(*self.quality_range)
+            
+            # Save to buffer with JPEG compression and reload
+            from io import BytesIO
+            buffer = BytesIO()
+            
+            # Ensure RGB mode for JPEG
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            img.save(buffer, format='JPEG', quality=quality)
+            buffer.seek(0)
+            img = Image.open(buffer).copy()  # .copy() to detach from buffer
+            buffer.close()
+            
+            if was_tensor:
+                img = F.to_tensor(img)
+        
+        return img
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}(quality_range={self.quality_range}, p={self.p})"
+
+
+class RandomMotionBlur(nn.Module):
+    """
+    Apply random motion blur to simulate camera movement or subject motion.
+    
+    Helps model generalize to blurry/motion-affected deepfake videos.
+    Motion blur is directional (horizontal, vertical, or diagonal).
+    
+    Works on PIL Images (before ToTensor).
+    """
+    def __init__(self, kernel_range=(3, 9), p=0.3):
+        """
+        Args:
+            kernel_range: Tuple of (min_kernel, max_kernel) for blur kernel size.
+                         Larger kernel = more motion blur. Must be odd numbers.
+            p: Probability of applying motion blur.
+        """
+        super().__init__()
+        self.kernel_range = kernel_range
+        self.p = p
+    
+    def forward(self, img):
+        if random.random() < self.p:
+            # Handle tensor input
+            if isinstance(img, torch.Tensor):
+                img = F.to_pil_image(img)
+                was_tensor = True
+            else:
+                was_tensor = False
+            
+            # Random kernel size (ensure odd)
+            kernel_size = random.randint(self.kernel_range[0] // 2, self.kernel_range[1] // 2) * 2 + 1
+            
+            # Create motion blur kernel
+            # Random angle for motion direction
+            angle = random.choice([0, 45, 90, 135])  # Horizontal, diagonal, vertical
+            
+            kernel = self._create_motion_kernel(kernel_size, angle)
+            
+            # Apply convolution using numpy (PIL Kernel only supports 3x3 and 5x5)
+            img = self._apply_kernel(img, kernel)
+            
+            if was_tensor:
+                img = F.to_tensor(img)
+        
+        return img
+    
+    def _apply_kernel(self, img, kernel):
+        """
+        Apply convolution kernel to PIL image using numpy.
+        
+        Args:
+            img: PIL Image
+            kernel: numpy array kernel
+            
+        Returns:
+            PIL Image with kernel applied
+        """
+        from scipy import ndimage
+        
+        # Convert to numpy array
+        img_array = np.array(img, dtype=np.float32)
+        
+        # Apply kernel to each channel
+        if len(img_array.shape) == 3:
+            result = np.zeros_like(img_array)
+            for c in range(img_array.shape[2]):
+                result[:, :, c] = ndimage.convolve(img_array[:, :, c], kernel, mode='reflect')
+        else:
+            result = ndimage.convolve(img_array, kernel, mode='reflect')
+        
+        # Clip values and convert back to uint8
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        return Image.fromarray(result)
+    
+    def _create_motion_kernel(self, size, angle):
+        """
+        Create a motion blur kernel with given size and angle.
+        
+        Args:
+            size: Kernel size (odd number)
+            angle: Angle in degrees (0=horizontal, 90=vertical)
+            
+        Returns:
+            numpy array of shape (size, size)
+        """
+        kernel = np.zeros((size, size), dtype=np.float32)
+        center = size // 2
+        
+        if angle == 0:  # Horizontal motion
+            kernel[center, :] = 1.0
+        elif angle == 90:  # Vertical motion
+            kernel[:, center] = 1.0
+        elif angle == 45:  # Diagonal (top-left to bottom-right)
+            for i in range(size):
+                kernel[i, i] = 1.0
+        elif angle == 135:  # Diagonal (top-right to bottom-left)
+            for i in range(size):
+                kernel[i, size - 1 - i] = 1.0
+        else:
+            # Default to horizontal
+            kernel[center, :] = 1.0
+        
+        # Normalize
+        kernel = kernel / kernel.sum()
+        
+        return kernel
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}(kernel_range={self.kernel_range}, p={self.p})"
+
+
 class DeepfakeDataset(datasets.ImageFolder):
     """
     Custom ImageFolder dataset with fixed class mapping: Real=0, Fake=1
@@ -144,7 +312,15 @@ class DeepfakeDataset(datasets.ImageFolder):
 
 def get_data_transforms(stage='train'):
     """
-    Get data transformations for different stages
+    Get data transformations for different stages.
+    
+    Training augmentations are designed for maximum cross-dataset generalization,
+    especially from FF++ → Celeb-DF v2. Key augmentations for generalization:
+    - JPEG compression: Different datasets use different compression levels
+    - Motion blur: Simulates real-world video artifacts
+    - Gaussian blur/noise: Handles quality variations
+    - Random downscale: Simulates low-resolution sources
+    - Grayscale: Forces model to learn non-color features
     
     Args:
         stage: 'train', 'val', or 'test'
@@ -154,11 +330,18 @@ def get_data_transforms(stage='train'):
     """
     
     if stage == 'train':
-        # Training augmentations for better generalization
+        # ============================================================
+        # TRAINING AUGMENTATIONS FOR CROSS-DATASET GENERALIZATION
+        # ============================================================
+        # Order matters! PIL-based augmentations before ToTensor.
+        
         transform_list = [
+            # 1. Spatial transforms (PIL)
             transforms.RandomResizedCrop(Config.IMG_SIZE, scale=(0.8, 1.0), ratio=(0.75, 1.33)),
             transforms.RandomHorizontalFlip(p=Config.HORIZONTAL_FLIP_PROB),
             transforms.RandomRotation(Config.ROTATION_DEGREES),
+            
+            # 2. Color transforms (PIL)
             transforms.ColorJitter(
                 brightness=Config.COLOR_JITTER_BRIGHTNESS,
                 contrast=Config.COLOR_JITTER_CONTRAST,
@@ -167,7 +350,23 @@ def get_data_transforms(stage='train'):
             ),
         ]
         
-        # Add Random Downscale (before ToTensor, works on PIL)
+        # 3. Grayscale augmentation (PIL) - forces non-color feature learning
+        if Config.USE_RANDOM_GRAYSCALE:
+            transform_list.append(
+                transforms.RandomGrayscale(p=Config.RANDOM_GRAYSCALE_PROB)
+            )
+        
+        # 4. JPEG Compression (PIL) - CRITICAL for cross-dataset generalization
+        # Different datasets use different compression, this makes model robust
+        if Config.USE_JPEG_COMPRESSION:
+            transform_list.append(
+                RandomJPEGCompression(
+                    quality_range=Config.JPEG_QUALITY_RANGE,
+                    p=Config.JPEG_COMPRESSION_PROB
+                )
+            )
+        
+        # 5. Random Downscale (PIL) - simulates low-resolution sources
         if Config.USE_RANDOM_DOWNSCALE:
             transform_list.append(
                 RandomDownscale(
@@ -176,7 +375,16 @@ def get_data_transforms(stage='train'):
                 )
             )
         
-        # Add Gaussian Blur (before ToTensor, works on PIL)
+        # 6. Motion Blur (PIL) - simulates camera/subject movement
+        if Config.USE_MOTION_BLUR:
+            transform_list.append(
+                RandomMotionBlur(
+                    kernel_range=Config.MOTION_BLUR_KERNEL_RANGE,
+                    p=Config.MOTION_BLUR_PROB
+                )
+            )
+        
+        # 7. Gaussian Blur (PIL) - handles out-of-focus/blurry images
         if Config.USE_GAUSSIAN_BLUR:
             transform_list.append(
                 RandomGaussianBlur(
@@ -186,10 +394,12 @@ def get_data_transforms(stage='train'):
                 )
             )
         
-        # Convert to tensor
+        # ============================================================
+        # Convert to Tensor
+        # ============================================================
         transform_list.append(transforms.ToTensor())
         
-        # Add Gaussian Noise (after ToTensor, works on Tensor)
+        # 8. Gaussian Noise (Tensor) - handles sensor noise
         if Config.USE_GAUSSIAN_NOISE:
             transform_list.append(
                 GaussianNoise(
@@ -198,15 +408,15 @@ def get_data_transforms(stage='train'):
                 )
             )
         
-        # Normalize
+        # 9. Normalize with ImageNet stats
         transform_list.append(
             transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],  # ImageNet normalization
+                mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225]
             )
         )
         
-        # Add random erasing if enabled (after normalization)
+        # 10. Random Erasing (Tensor, after normalization) - occlusion robustness
         if Config.USE_RANDOM_ERASING:
             transform_list.append(
                 transforms.RandomErasing(
@@ -219,9 +429,14 @@ def get_data_transforms(stage='train'):
         return transforms.Compose(transform_list)
     
     else:
-        # Validation/Test transformations (no augmentation)
+        # ============================================================
+        # VALIDATION/TEST TRANSFORMS
+        # ============================================================
+        # Use Resize + CenterCrop to preserve aspect ratio better
+        # This is more robust than direct resize to square
         return transforms.Compose([
-            transforms.Resize((Config.IMG_SIZE, Config.IMG_SIZE)),
+            transforms.Resize(Config.IMG_SIZE + 32),  # Resize shorter edge
+            transforms.CenterCrop(Config.IMG_SIZE),   # Center crop to target size
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],

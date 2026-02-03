@@ -74,19 +74,19 @@ class Config:
     STAGE1_EPOCHS = 5
     STAGE1_BATCH_SIZE = 48  # Can go higher since only head is trained
     STAGE1_LR = 1e-3  # High LR for fresh head layers
-    STAGE1_WEIGHT_DECAY = 1e-4
+    STAGE1_WEIGHT_DECAY = 0.001
     
     # Stage 2: Fine-tuning high-level layers (Xception + head)
     STAGE2_EPOCHS = 8
     STAGE2_BATCH_SIZE = 32  # Lower for fine-tuning (more memory)
     STAGE2_LR = 5e-5  # Lower LR for fine-tuning
-    STAGE2_WEIGHT_DECAY = 1e-4
+    STAGE2_WEIGHT_DECAY = 0.001
     
     # Stage 3: Fine-tuning ViT layers (for 3-stage training)
     STAGE3_EPOCHS = 8
-    STAGE3_BATCH_SIZE = 16  # ViT + Xception unfrozen = more memory
+    STAGE3_BATCH_SIZE = 32  # ViT + Xception unfrozen = more memory
     STAGE3_LR = 2e-5  # Very low LR for ViT fine-tuning
-    STAGE3_WEIGHT_DECAY = 1e-4
+    STAGE3_WEIGHT_DECAY = 0.001
     
     # Learning rates for different components (3-stage training)
     # Used in stage 2 & 3 when use_param_groups=True
@@ -106,9 +106,14 @@ class Config:
     GAMMA = 0.5  # LR decay factor
     T_MAX = 15  # For CosineAnnealingLR (total epochs)
     
+    # ==================== LOSS FUNCTION ====================
+    USE_FOCAL_LOSS = True  # Use Focal Loss instead of CrossEntropyLoss
+    FOCAL_GAMMA = 2.0  # Focusing parameter (0 = CrossEntropy, higher = more focus on hard examples)
+    # Recommended: 1.0-3.0, 2.0 is standard
+    
     # ==================== REGULARIZATION ====================
     DROPOUT = 0.5  # Dropout rate in classifier
-    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss
+    LABEL_SMOOTHING = 0.1  # Label smoothing for CrossEntropyLoss/FocalLoss
     
     # ==================== DATA LOADING ====================
     NUM_WORKERS = 4 # Reduced - too many can slow down on Windows
@@ -176,6 +181,20 @@ class Config:
     USE_RANDOM_DOWNSCALE = True
     RANDOM_DOWNSCALE_PROB = 0.3
     RANDOM_DOWNSCALE_RANGE = (0.5, 0.9)  # Scale range before upscaling back
+    
+    # JPEG compression augmentation (critical for cross-dataset generalization)
+    USE_JPEG_COMPRESSION = True
+    JPEG_COMPRESSION_PROB = 0.8  # High probability - compression is common in real-world
+    JPEG_QUALITY_RANGE = (30, 100)  # Quality range (lower = more compression artifacts)
+    
+    # Motion blur augmentation (simulates camera movement)
+    USE_MOTION_BLUR = True
+    MOTION_BLUR_PROB = 0.3
+    MOTION_BLUR_KERNEL_RANGE = (3, 9)  # Kernel size range (odd numbers)
+    
+    # Grayscale augmentation (forces model to learn non-color features)
+    USE_RANDOM_GRAYSCALE = True
+    RANDOM_GRAYSCALE_PROB = 0.15
     
     @classmethod
     def print_config(cls):

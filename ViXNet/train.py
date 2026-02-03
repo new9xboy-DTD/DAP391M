@@ -15,13 +15,47 @@ from config import Config
 from dataset import create_data_loaders, check_dataset_availability
 from utils import (
     train_one_epoch, validate, save_checkpoint, load_checkpoint,
-    print_metrics, save_training_history, EarlyStopping, check_stage1_complete
+    print_metrics, save_training_history, EarlyStopping, check_stage1_complete,
+    FocalLoss
 )
+
+
+def get_criterion():
+    """
+    Get the loss function based on configuration.
+    
+    Returns:
+        Loss function (FocalLoss or CrossEntropyLoss)
+    """
+    class_weights = torch.tensor(Config.WEIGHT_DATASET).to(Config.DEVICE)
+    
+    if Config.USE_FOCAL_LOSS:
+        print(f"\n📊 Using Focal Loss (gamma={Config.FOCAL_GAMMA}, label_smoothing={Config.LABEL_SMOOTHING})")
+        criterion = FocalLoss(
+            alpha=class_weights.tolist(),
+            gamma=Config.FOCAL_GAMMA,
+            label_smoothing=Config.LABEL_SMOOTHING,
+            reduction='mean'
+        )
+    else:
+        print(f"\n📊 Using CrossEntropyLoss (label_smoothing={Config.LABEL_SMOOTHING})")
+        criterion = nn.CrossEntropyLoss(
+            label_smoothing=Config.LABEL_SMOOTHING,
+            weight=class_weights
+        )
+    
+    return criterion
 
 
 def get_optimizer(model, lr, weight_decay):
     """
-    Create optimizer for training
+    Create optimizer for training with proper weight decay handling.
+    
+    IMPORTANT: Weight decay is NOT applied to:
+    - Bias parameters
+    - LayerNorm/BatchNorm parameters (weight and bias)
+    
+    This is crucial for training stability, especially for ViT.
     
     Args:
         model: Model to optimize
@@ -31,20 +65,51 @@ def get_optimizer(model, lr, weight_decay):
     Returns:
         Optimizer
     """
-    trainable_params = model.get_trainable_params()
+    # Separate parameters into decay and no_decay groups
+    decay_params = []
+    no_decay_params = []
+    
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        
+        # Skip weight decay for bias and normalization layers
+        if 'bias' in name:
+            no_decay_params.append(param)
+        elif 'norm' in name.lower():  # LayerNorm, BatchNorm, etc.
+            no_decay_params.append(param)
+        elif 'bn' in name.lower():  # BatchNorm alternative naming
+            no_decay_params.append(param)
+        elif 'ln' in name.lower():  # LayerNorm alternative naming
+            no_decay_params.append(param)
+        else:
+            decay_params.append(param)
+    
+    # Create parameter groups
+    param_groups = [
+        {'params': decay_params, 'weight_decay': weight_decay},
+        {'params': no_decay_params, 'weight_decay': 0.0}
+    ]
+    
+    # Log parameter counts
+    n_decay = sum(p.numel() for p in decay_params)
+    n_no_decay = sum(p.numel() for p in no_decay_params)
+    print(f"\n⚙️  Optimizer parameter groups:")
+    print(f"   With weight decay ({weight_decay}): {n_decay:,} params")
+    print(f"   Without weight decay: {n_no_decay:,} params")
     
     if Config.OPTIMIZER.lower() == 'adamw':
         optimizer = optim.AdamW(
-            trainable_params,
+            param_groups,
             lr=lr,
-            weight_decay=weight_decay
+            betas=(0.9, 0.999),
+            eps=1e-8
         )
     elif Config.OPTIMIZER.lower() == 'sgd':
         optimizer = optim.SGD(
-            trainable_params,
+            param_groups,
             lr=lr,
-            momentum=Config.MOMENTUM,
-            weight_decay=weight_decay
+            momentum=Config.MOMENTUM
         )
     else:
         raise ValueError(f"Unknown optimizer: {Config.OPTIMIZER}")
@@ -122,9 +187,8 @@ def train_stage(
     print(f"   Weight decay: {stage_config['weight_decay']}")
     print("="*70)
     
-    class_weights = torch.tensor(Config.WEIGHT_DATASET).to(Config.DEVICE)
     # Setup training components
-    criterion = nn.CrossEntropyLoss(label_smoothing=Config.LABEL_SMOOTHING, weight=class_weights)
+    criterion = get_criterion()
     optimizer = get_optimizer(model, stage_config['lr'], stage_config['weight_decay'])
     scheduler = get_scheduler(optimizer, stage_config['epochs'], stage_config['lr'])
     
@@ -135,12 +199,12 @@ def train_stage(
     early_stopping = EarlyStopping(
         patience=Config.PATIENCE,
         min_delta=Config.MIN_DELTA,
-        mode='max'  # Maximize accuracy
+        mode='max'  # Maximize AUC
     )
     
     # Training history
     history = []
-    best_val_acc = 0.0
+    best_val_auc = 0.0
     
     # Training loop
     for epoch in range(start_epoch, start_epoch + stage_config['epochs']):
@@ -192,11 +256,11 @@ def train_stage(
             history_entry['test'] = test_metrics
         history.append(history_entry)
         
-        # Check if best model
-        is_best = val_metrics['accuracy'] > best_val_acc
+        # Check if best model (based on AUC)
+        is_best = val_metrics['auc'] > best_val_auc
         if is_best:
-            best_val_acc = val_metrics['accuracy']
-            print(f"\n🎉 New best model! Validation accuracy: {best_val_acc:.4f}")
+            best_val_auc = val_metrics['auc']
+            print(f"\n🎉 New best model! Validation AUC: {best_val_auc:.4f}")
         
         # Save checkpoint
         if Config.SAVE_EVERY_EPOCH or is_best:
@@ -204,14 +268,14 @@ def train_stage(
                 model, optimizer, epoch, val_metrics, stage, is_best
             )
         
-        # Early stopping check
-        if early_stopping(val_metrics['accuracy']):
+        # Early stopping check (based on AUC)
+        if early_stopping(val_metrics['auc']):
             print(f"\n⚠️  Early stopping triggered after {epoch} epochs!")
-            print(f"   Best validation accuracy: {best_val_acc:.4f}")
+            print(f"   Best validation AUC: {best_val_auc:.4f}")
             break
     
     print(f"\n✅ {stage_config['name']} completed!")
-    print(f"🏆 Best validation accuracy: {best_val_acc:.4f}")
+    print(f"🏆 Best validation AUC: {best_val_auc:.4f}")
     
     return model, history
 
@@ -395,6 +459,7 @@ def train_vixnet():
         print("\n" + "="*70)
         print("🏆 FINAL TEST RESULTS")
         print("="*70)
+        print(f"   AUC: {test_metrics['auc']:.4f}")
         print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
         print(f"   Precision: {test_metrics['precision']:.4f}")
         print(f"   Recall: {test_metrics['recall']:.4f}")
@@ -563,6 +628,7 @@ def train_model(model_name="vixnet"):
         print("\n" + "="*70)
         print("🏆 FINAL TEST RESULTS")
         print("="*70)
+        print(f"   AUC: {test_metrics['auc']:.4f}")
         print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
         print(f"   Precision: {test_metrics['precision']:.4f}")
         print(f"   Recall: {test_metrics['recall']:.4f}")
@@ -581,7 +647,11 @@ def train_model(model_name="vixnet"):
 
 def get_optimizer_with_param_groups(model, param_groups, weight_decay):
     """
-    Create optimizer with different parameter groups (different LRs)
+    Create optimizer with different parameter groups (different LRs).
+    
+    IMPORTANT: Weight decay is NOT applied to:
+    - Bias parameters
+    - LayerNorm/BatchNorm parameters
     
     Args:
         model: Model to optimize
@@ -591,14 +661,52 @@ def get_optimizer_with_param_groups(model, param_groups, weight_decay):
     Returns:
         Optimizer
     """
-    # Add weight decay to each group
+    # Process each param group to separate decay/no_decay
+    processed_groups = []
+    
     for pg in param_groups:
-        pg['weight_decay'] = weight_decay
+        group_name = pg.get('name', 'unnamed')
+        group_lr = pg.get('lr', 1e-4)
+        
+        decay_params = []
+        no_decay_params = []
+        
+        for param in pg['params']:
+            # We need to find the parameter name - this is a workaround
+            # since we only have the param tensor, not the name
+            decay_params.append(param)  # Default to decay
+        
+        # For simplicity, we'll use a different approach:
+        # Check if param is 1D (likely bias/norm) vs 2D+ (weights)
+        decay_params = []
+        no_decay_params = []
+        
+        for param in pg['params']:
+            if param.dim() == 1:  # Bias and norm parameters are typically 1D
+                no_decay_params.append(param)
+            else:
+                decay_params.append(param)
+        
+        if decay_params:
+            processed_groups.append({
+                'params': decay_params,
+                'lr': group_lr,
+                'weight_decay': weight_decay,
+                'name': f'{group_name}_decay'
+            })
+        
+        if no_decay_params:
+            processed_groups.append({
+                'params': no_decay_params,
+                'lr': group_lr,
+                'weight_decay': 0.0,
+                'name': f'{group_name}_no_decay'
+            })
     
     if Config.OPTIMIZER.lower() == 'adamw':
-        optimizer = optim.AdamW(param_groups, eps=1e-10)
+        optimizer = optim.AdamW(processed_groups, betas=(0.9, 0.999), eps=1e-8)
     elif Config.OPTIMIZER.lower() == 'sgd':
-        optimizer = optim.SGD(param_groups, momentum=Config.MOMENTUM)
+        optimizer = optim.SGD(processed_groups, momentum=Config.MOMENTUM)
     else:
         raise ValueError(f"Unknown optimizer: {Config.OPTIMIZER}")
     
@@ -640,8 +748,8 @@ def train_stage_3stage(
     print(f"   Weight decay: {stage_config['weight_decay']}")
     print("="*70)
     
-    class_weights = torch.tensor(Config.WEIGHT_DATASET).to(Config.DEVICE)
-    criterion = nn.CrossEntropyLoss(label_smoothing=Config.LABEL_SMOOTHING, weight=class_weights)
+    # Setup training components
+    criterion = get_criterion()
     
     # Create optimizer with or without param groups
     if use_param_groups and hasattr(model, 'get_param_groups'):
@@ -661,11 +769,11 @@ def train_stage_3stage(
     early_stopping = EarlyStopping(
         patience=Config.PATIENCE,
         min_delta=Config.MIN_DELTA,
-        mode='max'
+        mode='max'  # Maximize AUC
     )
     
     history = []
-    best_val_acc = 0.0
+    best_val_auc = 0.0
     
     for epoch in range(start_epoch, start_epoch + stage_config['epochs']):
         print(f"\n{'='*70}")
@@ -713,23 +821,23 @@ def train_stage_3stage(
             history_entry['test'] = test_metrics
         history.append(history_entry)
         
-        is_best = val_metrics['accuracy'] > best_val_acc
+        is_best = val_metrics['auc'] > best_val_auc
         if is_best:
-            best_val_acc = val_metrics['accuracy']
-            print(f"\n🎉 New best model! Validation accuracy: {best_val_acc:.4f}")
+            best_val_auc = val_metrics['auc']
+            print(f"\n🎉 New best model! Validation AUC: {best_val_auc:.4f}")
         
         if Config.SAVE_EVERY_EPOCH or is_best:
             save_checkpoint(
                 model, optimizer, epoch, val_metrics, stage, is_best
             )
         
-        if early_stopping(val_metrics['accuracy']):
+        if early_stopping(val_metrics['auc']):
             print(f"\n⚠️  Early stopping triggered after {epoch} epochs!")
-            print(f"   Best validation accuracy: {best_val_acc:.4f}")
+            print(f"   Best validation AUC: {best_val_auc:.4f}")
             break
     
     print(f"\n✅ {stage_config['name']} completed!")
-    print(f"🏆 Best validation accuracy: {best_val_acc:.4f}")
+    print(f"🏆 Best validation AUC: {best_val_auc:.4f}")
     
     return model, history
 
@@ -898,6 +1006,7 @@ def train_vixnet_cross_attention_3stage():
         print("🏆 FINAL TEST RESULTS")
         print("="*70)
         print(f"   Labels: Real=0, Fake=1")
+        print(f"   AUC: {test_metrics['auc']:.4f}")
         print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
         print(f"   Precision: {test_metrics['precision']:.4f}")
         print(f"   Recall: {test_metrics['recall']:.4f}")
@@ -1200,6 +1309,7 @@ def resume_training_vixnet_cross_attention(checkpoint_path=None, resume_stage=No
         print("🏆 FINAL TEST RESULTS")
         print("="*70)
         print(f"   Labels: Real=0, Fake=1")
+        print(f"   AUC: {test_metrics['auc']:.4f}")
         print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
         print(f"   Precision: {test_metrics['precision']:.4f}")
         print(f"   Recall: {test_metrics['recall']:.4f}")
@@ -1520,6 +1630,7 @@ def train_vixnet_3stage():
         print("🏆 FINAL TEST RESULTS")
         print("="*70)
         print(f"   Labels: Real=0, Fake=1")
+        print(f"   AUC: {test_metrics['auc']:.4f}")
         print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
         print(f"   Precision: {test_metrics['precision']:.4f}")
         print(f"   Recall: {test_metrics['recall']:.4f}")

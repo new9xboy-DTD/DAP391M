@@ -14,10 +14,103 @@ import torch.nn as nn
 from tqdm import tqdm
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
-    confusion_matrix, classification_report
+    confusion_matrix, classification_report, roc_auc_score
 )
 
 from config import Config
+
+
+class FocalLoss(nn.Module):
+    """
+    Focal Loss for addressing class imbalance and improving AUC.
+    
+    Focal Loss = -alpha * (1 - p_t)^gamma * log(p_t)
+    
+    Where:
+    - p_t is the probability of the correct class
+    - alpha balances positive/negative samples
+    - gamma focuses on hard examples (higher gamma = more focus on hard examples)
+    
+    Benefits for AUC:
+    - Reduces loss contribution from easy examples
+    - Forces model to focus on hard-to-classify samples
+    - Improves ranking ability (key for AUC)
+    """
+    
+    def __init__(self, alpha=None, gamma=2.0, label_smoothing=0.0, reduction='mean'):
+        """
+        Args:
+            alpha: Class weights. Can be:
+                   - None: no weighting
+                   - float: weight for positive class (negative = 1 - alpha)
+                   - list/tensor: [weight_class_0, weight_class_1]
+            gamma: Focusing parameter. Higher = more focus on hard examples.
+                   gamma=0 is equivalent to CrossEntropyLoss.
+                   Recommended: 1.0-3.0 (2.0 is common)
+            label_smoothing: Label smoothing factor (0.0-1.0)
+            reduction: 'mean', 'sum', or 'none'
+        """
+        super().__init__()
+        self.gamma = gamma
+        self.label_smoothing = label_smoothing
+        self.reduction = reduction
+        
+        if alpha is not None:
+            if isinstance(alpha, (list, tuple)):
+                self.alpha = torch.tensor(alpha, dtype=torch.float32)
+            elif isinstance(alpha, (int, float)):
+                # If single value, assume it's weight for positive class
+                self.alpha = torch.tensor([1 - alpha, alpha], dtype=torch.float32)
+            else:
+                self.alpha = alpha
+        else:
+            self.alpha = None
+    
+    def forward(self, inputs, targets):
+        """
+        Args:
+            inputs: Predictions (logits) of shape [batch_size, num_classes]
+            targets: Ground truth labels of shape [batch_size]
+        """
+        # Apply label smoothing
+        num_classes = inputs.size(-1)
+        if self.label_smoothing > 0:
+            with torch.no_grad():
+                smooth_targets = torch.zeros_like(inputs)
+                smooth_targets.fill_(self.label_smoothing / (num_classes - 1))
+                smooth_targets.scatter_(1, targets.unsqueeze(1), 1.0 - self.label_smoothing)
+        else:
+            smooth_targets = torch.zeros_like(inputs)
+            smooth_targets.scatter_(1, targets.unsqueeze(1), 1.0)
+        
+        # Compute probabilities
+        log_probs = torch.nn.functional.log_softmax(inputs, dim=-1)
+        probs = torch.exp(log_probs)
+        
+        # Compute focal weight: (1 - p_t)^gamma
+        # p_t is the probability of the target class
+        pt = (probs * smooth_targets).sum(dim=-1)  # [batch_size]
+        focal_weight = (1 - pt) ** self.gamma
+        
+        # Compute cross entropy
+        ce_loss = -(smooth_targets * log_probs).sum(dim=-1)  # [batch_size]
+        
+        # Apply focal weight
+        focal_loss = focal_weight * ce_loss
+        
+        # Apply class weights (alpha)
+        if self.alpha is not None:
+            alpha = self.alpha.to(inputs.device)
+            alpha_t = alpha.gather(0, targets)
+            focal_loss = alpha_t * focal_loss
+        
+        # Reduction
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss
 
 
 def train_one_epoch(model, train_loader, criterion, optimizer, scaler, epoch, stage_name):
@@ -155,22 +248,29 @@ def validate(model, val_loader, criterion, epoch=None, stage_name="Validation"):
     epoch_loss = running_loss / len(val_loader.dataset)
     epoch_acc = accuracy_score(all_labels, all_preds)
     
+    # Convert probabilities to numpy array for AUC calculation
+    all_probs_np = np.array(all_probs)
+    
     # Only compute binary metrics if we have both classes
     unique_labels = np.unique(all_labels)
     if len(unique_labels) > 1:
         epoch_precision = precision_score(all_labels, all_preds, average='binary', zero_division=0)
         epoch_recall = recall_score(all_labels, all_preds, average='binary', zero_division=0)
         epoch_f1 = f1_score(all_labels, all_preds, average='binary', zero_division=0)
+        # Calculate AUC using probability of positive class (Fake=1)
+        epoch_auc = roc_auc_score(all_labels, all_probs_np[:, 1])
     else:
         epoch_precision = 0.0
         epoch_recall = 0.0
         epoch_f1 = 0.0
+        epoch_auc = 0.0
     
     cm = confusion_matrix(all_labels, all_preds)
     
     return {
         'loss': epoch_loss,
         'accuracy': epoch_acc,
+        'auc': epoch_auc,
         'precision': epoch_precision,
         'recall': epoch_recall,
         'f1': epoch_f1,
@@ -204,6 +304,7 @@ def save_checkpoint(model, optimizer, epoch, metrics, stage, is_best=False, file
         'metrics': {
             'loss': float(metrics['loss']),
             'accuracy': float(metrics['accuracy']),
+            'auc': float(metrics['auc']),
             'precision': float(metrics['precision']),
             'recall': float(metrics['recall']),
             'f1': float(metrics['f1']),
@@ -318,6 +419,7 @@ def print_metrics(train_metrics, val_metrics, test_metrics=None, epoch=None):
     
     print("\n✅ VALIDATION:")
     print(f"   Loss: {val_metrics['loss']:.4f}")
+    print(f"   AUC: {val_metrics['auc']:.4f}")
     print(f"   Accuracy: {val_metrics['accuracy']:.4f}")
     print(f"   Precision: {val_metrics['precision']:.4f}")
     print(f"   Recall: {val_metrics['recall']:.4f}")
@@ -328,6 +430,7 @@ def print_metrics(train_metrics, val_metrics, test_metrics=None, epoch=None):
     if test_metrics:
         print("\n🧪 TEST:")
         print(f"   Loss: {test_metrics['loss']:.4f}")
+        print(f"   AUC: {test_metrics['auc']:.4f}")
         print(f"   Accuracy: {test_metrics['accuracy']:.4f}")
         print(f"   Precision: {test_metrics['precision']:.4f}")
         print(f"   Recall: {test_metrics['recall']:.4f}")
