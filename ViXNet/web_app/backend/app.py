@@ -17,7 +17,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
 import torchvision.transforms as transforms
-from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score
+from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score, f1_score, precision_score, recall_score
 import io
 import base64
 import time
@@ -242,12 +242,20 @@ def calculate_auc_on_test_set(model, dataset_key='default', device=None):
         
         auc = roc_auc_score(all_labels, all_probs)
         accuracy = accuracy_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds, average='binary')  # Binary F1 for Fake class
+        f1_weighted = f1_score(all_labels, all_preds, average='weighted')  # Weighted F1
+        precision = precision_score(all_labels, all_preds, average='binary')
+        recall = recall_score(all_labels, all_preds, average='binary')
         cm = confusion_matrix(all_labels, all_preds)
         fpr, tpr, thresholds = roc_curve(all_labels, all_probs)
         
         results = {
             'auc': float(auc),
             'accuracy': float(accuracy),
+            'f1_score': float(f1),
+            'f1_weighted': float(f1_weighted),
+            'precision': float(precision),
+            'recall': float(recall),
             'confusion_matrix': cm.tolist(),
             'roc_curve': {
                 'fpr': fpr.tolist(),
@@ -258,7 +266,7 @@ def calculate_auc_on_test_set(model, dataset_key='default', device=None):
             'dataset_key': dataset_key
         }
         
-        print(f"✅ AUC: {auc:.4f}, Accuracy: {accuracy:.4f}")
+        print(f"✅ AUC: {auc:.4f}, Accuracy: {accuracy:.4f}, F1: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
         return results, None
         
     except Exception as e:

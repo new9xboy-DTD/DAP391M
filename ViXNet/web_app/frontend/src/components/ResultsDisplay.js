@@ -99,6 +99,36 @@ const ResultsDisplay = ({ predictionResult, analysisResult }) => {
                   </div>
                 </div>
                 
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 p-5 rounded-xl text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <div className="text-4xl mb-3">⚖️</div>
+                  <div className="text-sm text-gray-500 font-medium mb-2">F1 Score</div>
+                  <div className="text-3xl font-bold text-purple-700">
+                    {analysisResult.model_info.auc_results.f1_score !== undefined 
+                      ? (analysisResult.model_info.auc_results.f1_score * 100).toFixed(2) + '%'
+                      : 'N/A'}
+                  </div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 p-5 rounded-xl text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <div className="text-4xl mb-3">🎯</div>
+                  <div className="text-sm text-gray-500 font-medium mb-2">Precision</div>
+                  <div className="text-3xl font-bold text-blue-700">
+                    {analysisResult.model_info.auc_results.precision !== undefined 
+                      ? (analysisResult.model_info.auc_results.precision * 100).toFixed(2) + '%'
+                      : 'N/A'}
+                  </div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-300 p-5 rounded-xl text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <div className="text-4xl mb-3">🔍</div>
+                  <div className="text-sm text-gray-500 font-medium mb-2">Recall</div>
+                  <div className="text-3xl font-bold text-orange-700">
+                    {analysisResult.model_info.auc_results.recall !== undefined 
+                      ? (analysisResult.model_info.auc_results.recall * 100).toFixed(2) + '%'
+                      : 'N/A'}
+                  </div>
+                </div>
+                
                 <div className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 p-5 rounded-xl text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
                   <div className="text-4xl mb-3">📦</div>
                   <div className="text-sm text-gray-500 font-medium mb-2">Test Samples</div>
@@ -112,36 +142,44 @@ const ResultsDisplay = ({ predictionResult, analysisResult }) => {
               {analysisResult.model_info.auc_results.confusion_matrix && (
                 <div className="bg-gray-50 p-5 rounded-xl">
                   <h4 className="text-lg font-semibold text-gray-700 mb-4">Confusion Matrix</h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse bg-white rounded-lg overflow-hidden mt-4">
-                      <thead>
-                        <tr>
-                          <th className="p-4 bg-gray-100 font-semibold text-gray-800 border border-gray-200"></th>
-                          <th className="p-4 bg-gray-100 font-semibold text-gray-800 border border-gray-200">Fake</th>
-                          <th className="p-4 bg-gray-100 font-semibold text-gray-800 border border-gray-200">Real</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <th className="p-4 bg-gray-100 font-semibold text-gray-800 border border-gray-200">Fake</th>
-                          <td className="p-4 text-center text-xl font-semibold bg-green-100 text-green-800 border border-gray-200">
-                            {analysisResult.model_info.auc_results.confusion_matrix[0][0]}
-                          </td>
-                          <td className="p-4 text-center text-xl font-semibold bg-red-100 text-red-800 border border-gray-200">
-                            {analysisResult.model_info.auc_results.confusion_matrix[0][1]}
-                          </td>
-                        </tr>
-                        <tr>
-                          <th className="p-4 bg-gray-100 font-semibold text-gray-800 border border-gray-200">Real</th>
-                          <td className="p-4 text-center text-xl font-semibold bg-red-100 text-red-800 border border-gray-200">
-                            {analysisResult.model_info.auc_results.confusion_matrix[1][0]}
-                          </td>
-                          <td className="p-4 text-center text-xl font-semibold bg-green-100 text-green-800 border border-gray-200">
-                            {analysisResult.model_info.auc_results.confusion_matrix[1][1]}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div className="flex justify-center">
+                    <div className="inline-block">
+                      <div className="text-center text-sm font-semibold text-gray-600 mb-2">Predicted</div>
+                      <div className="flex">
+                        <div className="flex flex-col justify-center mr-2">
+                          <div className="text-sm font-semibold text-gray-600 transform -rotate-90 whitespace-nowrap" style={{width: '20px'}}>Actual</div>
+                        </div>
+                        <table className="border-collapse bg-white rounded-lg overflow-hidden" style={{width: '220px'}}>
+                          <thead>
+                            <tr>
+                              <th className="p-3 bg-gray-100 font-semibold text-gray-800 border border-gray-200 w-16"></th>
+                              <th className="p-3 bg-gray-100 font-semibold text-gray-800 border border-gray-200 w-20">Fake</th>
+                              <th className="p-3 bg-gray-100 font-semibold text-gray-800 border border-gray-200 w-20">Real</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <th className="p-3 bg-gray-100 font-semibold text-gray-800 border border-gray-200">Fake</th>
+                              <td className="p-3 text-center text-lg font-semibold bg-green-100 text-green-800 border border-gray-200" style={{width: '70px', height: '50px'}}>
+                                {analysisResult.model_info.auc_results.confusion_matrix[0][0]}
+                              </td>
+                              <td className="p-3 text-center text-lg font-semibold bg-red-100 text-red-800 border border-gray-200" style={{width: '70px', height: '50px'}}>
+                                {analysisResult.model_info.auc_results.confusion_matrix[0][1]}
+                              </td>
+                            </tr>
+                            <tr>
+                              <th className="p-3 bg-gray-100 font-semibold text-gray-800 border border-gray-200">Real</th>
+                              <td className="p-3 text-center text-lg font-semibold bg-red-100 text-red-800 border border-gray-200" style={{width: '70px', height: '50px'}}>
+                                {analysisResult.model_info.auc_results.confusion_matrix[1][0]}
+                              </td>
+                              <td className="p-3 text-center text-lg font-semibold bg-green-100 text-green-800 border border-gray-200" style={{width: '70px', height: '50px'}}>
+                                {analysisResult.model_info.auc_results.confusion_matrix[1][1]}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -150,47 +188,53 @@ const ResultsDisplay = ({ predictionResult, analysisResult }) => {
               {analysisResult.model_info.auc_results.roc_curve && (
                 <div className="bg-gray-50 p-5 rounded-xl">
                   <h4 className="text-lg font-semibold text-gray-700 mb-4">ROC Curve</h4>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="fpr" 
-                        type="number"
-                        domain={[0, 1]}
-                        label={{ value: 'False Positive Rate', position: 'insideBottom', offset: -5 }}
-                      />
-                      <YAxis 
-                        type="number"
-                        domain={[0, 1]}
-                        label={{ value: 'True Positive Rate', angle: -90, position: 'insideLeft' }}
-                      />
-                      <Tooltip />
-                      <Legend />
-                      <Line 
-                        type="monotone"
-                        data={analysisResult.model_info.auc_results.roc_curve.fpr.map((fpr, i) => ({
-                          fpr: fpr,
-                          tpr: analysisResult.model_info.auc_results.roc_curve.tpr[i]
-                        }))}
-                        dataKey="tpr" 
-                        stroke="#0ea5e9" 
-                        strokeWidth={3}
-                        dot={false}
-                        name="ROC Curve"
-                      />
-                      <Line 
-                        type="monotone"
-                        data={[{fpr: 0, tpr: 0}, {fpr: 1, tpr: 1}]}
-                        dataKey="tpr"
-                        stroke="#999" 
-                        strokeWidth={2}
-                        strokeDasharray="5 5"
-                        dot={false}
-                        name="Random Classifier"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  <p className="text-center text-lg font-semibold text-primary-500 mt-4">
+                  <div className="flex justify-center">
+                    <div style={{width: '350px', height: '350px'}}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart margin={{ top: 10, right: 20, left: 10, bottom: 30 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="fpr" 
+                            type="number"
+                            domain={[0, 1]}
+                            label={{ value: 'False Positive Rate', position: 'insideBottom', offset: -10 }}
+                            tick={{ fontSize: 11 }}
+                          />
+                          <YAxis 
+                            type="number"
+                            domain={[0, 1]}
+                            label={{ value: 'True Positive Rate', angle: -90, position: 'insideLeft', offset: 5 }}
+                            tick={{ fontSize: 11 }}
+                          />
+                          <Tooltip />
+                          <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                          <Line 
+                            type="monotone"
+                            data={analysisResult.model_info.auc_results.roc_curve.fpr.map((fpr, i) => ({
+                              fpr: fpr,
+                              tpr: analysisResult.model_info.auc_results.roc_curve.tpr[i]
+                            }))}
+                            dataKey="tpr" 
+                            stroke="#0ea5e9" 
+                            strokeWidth={2}
+                            dot={false}
+                            name="ROC Curve"
+                          />
+                          <Line 
+                            type="monotone"
+                            data={[{fpr: 0, tpr: 0}, {fpr: 1, tpr: 1}]}
+                            dataKey="tpr"
+                            stroke="#999" 
+                            strokeWidth={1.5}
+                            strokeDasharray="5 5"
+                            dot={false}
+                            name="Random Classifier"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  <p className="text-center text-sm font-semibold text-primary-500 mt-3">
                     AUC = {analysisResult.model_info.auc_results.auc.toFixed(4)}
                   </p>
                 </div>
