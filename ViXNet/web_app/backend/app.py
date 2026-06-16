@@ -31,7 +31,7 @@ from config import Config
 from torchvision import datasets
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for React frontend
+CORS(app, origins=os.environ.get("VIXNET_CORS_ORIGINS", "http://localhost:3000").split(","))
 
 
 def get_available_device():
@@ -444,23 +444,27 @@ def calculate_auc():
 
 
 if __name__ == '__main__':
-    print("="*70)
-    print("🚀 Starting Multi-Model Deepfake Detection Web API")
-    print("="*70)
-    
-    print("\n📦 Supported Model Types:")
-    print("   • ViXNet (Vision Transformer + Xception)")
-    print("   • Xception Only")
-    print("   • ViT Only")
-    
-    print("\n📁 Available Datasets:")
+    host = os.environ.get("VIXNET_API_HOST", "127.0.0.1")
+    port = int(os.environ.get("VIXNET_API_PORT", "5000"))
+    debug = os.environ.get("VIXNET_DEBUG", "0") == "1"
+
+    print("=" * 70)
+    print("Starting Multi-Model Deepfake Detection Web API")
+    print("=" * 70)
+
+    print("\nSupported Model Types:")
+    print("   - ViXNet (Vision Transformer + Xception)")
+    print("   - Xception Only")
+    print("   - ViT Only")
+
+    print("\nAvailable Datasets:")
     available_datasets = Config.list_available_datasets()
     for ds in available_datasets:
-        print(f"   • {ds['name']} ({ds['key']})")
-    
-    print("\n" + "="*70)
-    print("📡 API Endpoints:")
-    print("="*70)
+        print(f"   - {ds['name']} ({ds['key']})")
+
+    print("\n" + "=" * 70)
+    print("API Endpoints:")
+    print("=" * 70)
     print("  GET  /api/health          - Health check")
     print("  GET  /api/datasets        - List available datasets")
     print("  GET  /api/model-info      - Get current model information")
@@ -469,14 +473,13 @@ if __name__ == '__main__':
     print("  POST /api/calculate-auc   - Calculate AUC for current model")
     print("       JSON body: {\"dataset\": \"default\"}")
     print("  POST /api/predict         - Predict image (Real/Fake)")
-    print("\n" + "="*70)
-    print("🌐 Server running on http://localhost:5000")
-    print("="*70)
-    print("\n⚠️  Note: Running in development mode.")
+    print("\n" + "=" * 70)
+    print(f"Server running on http://{host}:{port}")
+    print("=" * 70)
+    print("\nNote: Running in development mode.")
     print("   For production, use a WSGI server like Gunicorn:")
     print("   gunicorn -w 4 -b 0.0.0.0:5000 app:app")
-    print("\n💡 Tip: No model is loaded by default. Upload a model to begin.")
+    print("\nTip: No model is loaded by default. Upload a model to begin.")
     print("")
-    
-    # Run in development mode - for production use gunicorn or similar
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    app.run(host=host, port=port, debug=debug)

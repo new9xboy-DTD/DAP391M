@@ -1,14 +1,29 @@
 .venv/
+.env
+.env.*
 archive/
 CNN + Transformer/Dataset/
 CNN + Transformer/FaceForensics
 CNN + Transformer/Dataset.zip
 __pycache__/
 *.pyc
+*.log
+*.pth
+*.pt
+*.onnx
+*.ckpt
+*.h5
+*.sqlite
+*.db
+*.docx
+*.pptx
+~$*
+.installed
 **/checkpoints*/
 Dataset/
 ViXNet/checkpoints*/
 **/node_modules/
+**/uploads/
 Celeb_V2/
 archive.zip
 **/model/

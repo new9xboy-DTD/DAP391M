@@ -4,7 +4,17 @@ Contains all hyperparameters and settings
 """
 
 import os
+from pathlib import Path
 import torch
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = Path(os.environ.get("VIXNET_DATA_ROOT", REPO_ROOT / "data"))
+
+
+def dataset_path(env_name, *parts):
+    """Return a dataset path from an environment variable or a local default."""
+    return os.environ.get(env_name, str(DATA_ROOT.joinpath(*parts)))
 
 
 class Config:
@@ -13,7 +23,7 @@ class Config:
     """
     
     # ==================== DATA PATHS ====================
-    DATA_DIR = os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new")
+    DATA_DIR = dataset_path("VIXNET_DEFAULT_DATASET", "FaceForensics_new")
     TRAIN_DIR = os.path.join(DATA_DIR, "train")
     VAL_DIR = os.path.join(DATA_DIR, "val")
     TEST_DIR = os.path.join(DATA_DIR, "test")
@@ -22,31 +32,31 @@ class Config:
     DATASETS = {
         'default': {
             'name': 'Default Dataset',
-            'path': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new"),
-            'train': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new", "train"),
-            'val': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new", "val"),
-            'test': os.path.join("D:\\Repo\\DAP391m", "FaceForensics_new", "test")
+            'path': DATA_DIR,
+            'train': TRAIN_DIR,
+            'val': VAL_DIR,
+            'test': TEST_DIR
         },
         'celeb': {
             'name': 'CelebDF (V2)',
-            'path': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2"),
-            'train': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Train"),
-            'val': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Validation"),
-            'test': os.path.join("D:\\Repo\\DAP391m", "Celeb_V2", "Test")
+            'path': dataset_path("VIXNET_CELEB_DATASET", "Celeb_V2"),
+            'train': os.path.join(dataset_path("VIXNET_CELEB_DATASET", "Celeb_V2"), "Train"),
+            'val': os.path.join(dataset_path("VIXNET_CELEB_DATASET", "Celeb_V2"), "Validation"),
+            'test': os.path.join(dataset_path("VIXNET_CELEB_DATASET", "Celeb_V2"), "Test")
         },
         'wilddeepfake': {
             'name': 'WildDeepfake',
-            'path': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake"),
-            'train': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake", "train"),
-            'val': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake", "val"),
-            'test': os.path.join("D:\\Repo\\DAP391m", "wilddeepfake_20k")
+            'path': dataset_path("VIXNET_WILDDEEPFAKE_DATASET", "wilddeepfake"),
+            'train': os.path.join(dataset_path("VIXNET_WILDDEEPFAKE_DATASET", "wilddeepfake"), "train"),
+            'val': os.path.join(dataset_path("VIXNET_WILDDEEPFAKE_DATASET", "wilddeepfake"), "val"),
+            'test': dataset_path("VIXNET_WILDDEEPFAKE_TEST_DATASET", "wilddeepfake_20k")
         },
         'DFDC': {
             'name': 'DFDC',
-            'path': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake"),
-            'train': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake", "train"),
-            'val': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake", "valid"),
-            'test': os.path.join("D:\\Repo\\DAP391m", "real_vs_fake", "real-vs-fake", "test")
+            'path': dataset_path("VIXNET_DFDC_DATASET", "real_vs_fake", "real-vs-fake"),
+            'train': os.path.join(dataset_path("VIXNET_DFDC_DATASET", "real_vs_fake", "real-vs-fake"), "train"),
+            'val': os.path.join(dataset_path("VIXNET_DFDC_DATASET", "real_vs_fake", "real-vs-fake"), "valid"),
+            'test': os.path.join(dataset_path("VIXNET_DFDC_DATASET", "real_vs_fake", "real-vs-fake"), "test")
         },
         # Add more datasets here in the future
         # 'dataset2': {

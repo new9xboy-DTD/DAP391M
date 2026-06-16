@@ -1,129 +1,107 @@
-# DAP391M
+# DAP391M - Deepfake Detection
 
-## 🆕 Recent Update: Multi-Model Web Application
+Repository này chứa mã nguồn nghiên cứu và demo web cho bài toán phát hiện ảnh deepfake. Phần triển khai chính hiện tại là **ViXNet**, kết hợp Xception và Vision Transformer, kèm giao diện React + Flask để tải model, chạy inference và xem một số chỉ số đánh giá.
 
-**New Features (2026-01-20):**
-- ✅ Support for multiple model architectures (ViXNet, Xception Only, ViT Only)
-- ✅ Dataset selection for model evaluation  
-- ✅ No default model loading (memory efficient)
-- ✅ Automatic model type detection
-- ✅ Improved user interface
+## Nội Dung Repo
 
-**See:** [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) for complete details
+- `ViXNet/`: mã huấn luyện, kiến trúc model, dataset loader và ví dụ inference.
+- `ViXNet/web_app/`: ứng dụng web gồm backend Flask và frontend React.
+- `Paper_Group1_Final.pdf`: bài báo/báo cáo final của nhóm.
+- `requirements.txt`: dependency Python cấp repo.
+- `run.sh`: ví dụ cài PyTorch CUDA 11.8.
 
-### Quick Start (Multi-Model Web App)
-
-```bash
-# Backend
-cd ViXNet/web_app/backend
-python app.py
-
-# Frontend (new terminal)
-cd ViXNet/web_app/frontend
-npm install && npm start
-```
-
-**Documentation:**
-- [USER_GUIDE.md](USER_GUIDE.md) - English guide
-- [HUONG_DAN_TIENG_VIET.md](HUONG_DAN_TIENG_VIET.md) - Vietnamese guide
-- [MULTI_MODEL_IMPLEMENTATION.md](MULTI_MODEL_IMPLEMENTATION.md) - Technical details
-
----
+Dataset, checkpoint/model weights, file log và dữ liệu sinh trong quá trình chạy không được commit vào repo.
 
 ## Dataset
 
-- Kaggle: [https://www.kaggle.com/datasets/manjilkarki/deepfake-and-real-images/data](https://www.kaggle.com/datasets/manjilkarki/deepfake-and-real-images/data)
-- This dataset contains manipulated images and real images. The manipulated images are the faces which are created by various means. The source for this dataset was [https://zenodo.org/record/5528418#.YpdlS2hBzDd](https://zenodo.org/record/5528418#.YpdlS2hBzDd)
-  this dataset was processed as our will to get maximum outcome out of these images. Each image is a 256 X 256 jpg image of human face either real or fake
-- Kaggle: https://www.kaggle.com/datasets/greatgamedota/ffhq-face-data-set
+Code mặc định tìm dataset trong thư mục `data/` tại root repo:
 
-## Project Structure
-
-This repository contains multiple deepfake detection implementations:
-
-### 1. ViXNet (Recommended) 🆕 Multi-Model Support
-
-Vision Transformer with Xception Network - State-of-the-art deepfake detection with web interface.
-
-**Location:** `ViXNet/`
-
-**Features:**
-
-- 🆕 Multiple model architectures (ViXNet, Xception, ViT)
-- 🆕 Dataset selection for evaluation
-- 2-branch fusion architecture (Xception + ViT)
-- 2-stage training strategy
-- Web application for model visualization and inference
-- Comprehensive documentation
-
-**See:** [ViXNet/README.md](ViXNet/README.md)
-
-### 2. CNN + Transformer
-
-Basic CNN and Transformer implementation for deepfake detection.
-
-**Location:** `CNN + Transformer/`
-
-### 3. Sequence Diffusion GCN
-
-Advanced implementation using diffusion models and graph convolutional networks.
-
-**Location:** `Sequence_Diffusion_GCN/`
-
-### 4. VGG16 Fine-tuning
-
-Transfer learning approach using VGG16.
-
-**Location:** `sky-787770/`
-
-## Quick Start
-
-### For ViXNet Web Application
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start web application
-cd ViXNet/web_app
-./start.sh  # or start.bat on Windows
+```text
+data/
+  FaceForensics_new/
+    train/
+      Fake/
+      Real/
+    val/
+      Fake/
+      Real/
+    test/
+      Fake/
+      Real/
 ```
 
-Access at: http://localhost:3000
+Bạn có thể đổi đường dẫn bằng biến môi trường:
 
-**Full documentation:** [ViXNet/web_app/README.md](ViXNet/web_app/README.md)
+```bash
+VIXNET_DATA_ROOT=/path/to/data
+VIXNET_DEFAULT_DATASET=/path/to/FaceForensics_new
+VIXNET_CELEB_DATASET=/path/to/Celeb_V2
+VIXNET_WILDDEEPFAKE_DATASET=/path/to/wilddeepfake
+VIXNET_DFDC_DATASET=/path/to/real_vs_fake/real-vs-fake
+```
 
-## Requirements
+## Cài Đặt
 
-- Python 3.8+
-- **PyTorch 2.6.0+** (updated for security)
-- Node.js 16+ (for web app)
-- See `requirements.txt` for complete dependencies
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-## Security
+Nếu dùng CUDA, chọn đúng bản PyTorch theo máy của bạn từ tài liệu chính thức của PyTorch.
 
-This project has been updated to address critical PyTorch vulnerabilities:
+## Chạy Huấn Luyện
 
-- Heap buffer overflow (fixed in PyTorch 2.2.0)
-- Use-after-free vulnerability (fixed in PyTorch 2.2.0)
-- Remote code execution via torch.load (fixed in PyTorch 2.6.0)
+```bash
+cd ViXNet
+python train.py
+```
 
-**See [SECURITY.md](SECURITY.md) for complete security information and migration guide.**
+Checkpoint sẽ được lưu trong `ViXNet/checkpoints/` hoặc `checkpoints/` tùy cấu hình. Các thư mục checkpoint đã được ignore để tránh commit file model lớn.
 
-## Documentation
+## Chạy Web App
 
-### New Multi-Model Documentation
-- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Overview of latest changes
-- **[USER_GUIDE.md](USER_GUIDE.md)** - English user guide
-- **[HUONG_DAN_TIENG_VIET.md](HUONG_DAN_TIENG_VIET.md)** - Vietnamese user guide
-- **[MULTI_MODEL_IMPLEMENTATION.md](MULTI_MODEL_IMPLEMENTATION.md)** - Technical details
-- **[ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)** - System architecture
+Backend:
 
-### Existing Documentation
-- **ViXNet Documentation:** [ViXNet/README.md](ViXNet/README.md)
-- **Web App Guide:** [ViXNet/web_app/README.md](ViXNet/web_app/README.md)
-- **Quick Start:** [ViXNet/web_app/QUICKSTART.md](ViXNet/web_app/QUICKSTART.md)
+```bash
+cd ViXNet/web_app/backend
+pip install -r requirements.txt
+python app.py
+```
+
+Frontend:
+
+```bash
+cd ViXNet/web_app/frontend
+npm install
+npm start
+```
+
+Mặc định:
+
+- Backend: `http://127.0.0.1:5000`
+- Frontend: `http://localhost:3000`
+
+Trên Windows có thể chạy:
+
+```bat
+cd ViXNet\web_app
+start.bat
+```
+
+## Lưu Ý Bảo Mật
+
+- Chỉ upload checkpoint/model từ nguồn bạn tin tưởng. File PyTorch checkpoint có thể không an toàn nếu lấy từ nguồn lạ.
+- Flask backend mặc định chạy local với `debug=False`. Nếu cần bật debug, đặt `VIXNET_DEBUG=1`.
+- Không commit dataset, checkpoint, `.env`, log, file nén hoặc tài liệu nháp.
+- Ứng dụng web hiện phục vụ mục đích demo/nghiên cứu, chưa phải cấu hình production.
+
+## Tài Liệu Chi Tiết
+
+- [ViXNet README](ViXNet/README.md)
+- [Web App README](ViXNet/web_app/README.md)
+- [Hướng dẫn tiếng Việt](HUONG_DAN_TIENG_VIET.md)
 
 ## License
 
-This project is for educational and research purposes.
+Repo này phục vụ mục đích học tập và nghiên cứu. Nếu bạn muốn người khác tái sử dụng code rõ ràng hơn, hãy thêm file `LICENSE` phù hợp trước khi public rộng rãi.
