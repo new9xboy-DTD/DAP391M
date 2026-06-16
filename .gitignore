@@ -28,6 +28,7 @@ Celeb_V2/
 archive.zip
 **/model/
 **/build/
+**/dist/
 FF++/
 FaceForensics/
 *.zip
